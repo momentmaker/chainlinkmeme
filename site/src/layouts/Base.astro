@@ -83,6 +83,8 @@ const fullOg = ogImage ?? null;
         <span class="tagline">cosmic memes by linkmarines, for chainlink</span>
         <div class="right">
           <slot name="header-actions" />
+          <a href={`${base}/map/`} class="filter-pill" title="Tag constellation — the archive as a cosmos">map</a>
+          <a href={`${base}/week/`} class="filter-pill" title="Weekly top 7 memes">weekly</a>
           <a href={`${base}/contribute/`} class="filter-pill">contribute</a>
         </div>
       </header>
