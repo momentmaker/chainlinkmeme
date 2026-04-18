@@ -12,6 +12,7 @@
     "validate": "tsx scripts/validate.ts",
     "manifest": "tsx scripts/build-manifest.ts",
     "og": "tsx scripts/build-og-images.ts",
+    "weekly": "tsx scripts/build-weekly.ts",
     "generate-tomls": "tsx scripts/generate-tomls.ts"
   },
   "packageManager": "pnpm@10.18.2",

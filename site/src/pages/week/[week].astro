@@ -1,0 +1,84 @@
+---
+import Base from '../../layouts/Base.astro';
+import { ThemeToggle } from '../../components/Gallery';
+import { memeUrl, permalinkUrl } from '../../lib/meme-url';
+import type { Manifest, MemeEntry } from '../../lib/manifest';
+import manifestJson from '../../../public/manifest.json';
+
+interface WeeklySnapshot {
+  week: string;
+  start: string;
+  end: string;
+  generated_at: string;
+  top: Array<{ slug: string; total: number; counts: { heart: number; laugh: number; bolt: number; diamond: number } }>;
+}
+
+export async function getStaticPaths() {
+  // Vite's glob import pulls in every weekly snapshot that has been
+  // committed to the repo. Each snapshot becomes a static page.
+  const modules = import.meta.glob<WeeklySnapshot>('../../data/weekly/*.json', { eager: true, import: 'default' });
+  return Object.entries(modules).map(([filePath, snap]) => {
+    const week = filePath.replace(/^.*\//, '').replace(/\.json$/, '');
+    return { params: { week }, props: { snap } };
+  });
+}
+
+const { snap } = Astro.props as { snap: WeeklySnapshot };
+const manifest = manifestJson as Manifest;
+const memesBySlug = new Map<string, MemeEntry>(manifest.memes.map((m) => [m.slug, m]));
+const rows = snap.top
+  .map((r) => ({ ...r, meme: memesBySlug.get(r.slug) }))
+  .filter((r): r is typeof r & { meme: MemeEntry } => !!r.meme);
+
+const HASH_RE = /^[0-9a-f]{10,}$/i;
+function displayTitle(m: MemeEntry): string {
+  if (m.title && !HASH_RE.test(m.title)) return m.title;
+  return m.tags[0] ? `#${m.tags[0]}` : m.slug;
+}
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+<Base
+  title={`⬢ ${snap.week} — chainlink meme`}
+  description={`Top 7 memes for ${snap.week} (${snap.start} → ${snap.end})`}
+>
+  <ThemeToggle client:load slot="header-actions" />
+  <article class="weekly">
+    <header class="weekly-header">
+      <p class="weekly-eyebrow">⬢ weekly stack</p>
+      <h1 class="weekly-title">{snap.week}</h1>
+      <p class="weekly-range">{snap.start} → {snap.end}</p>
+    </header>
+
+    {rows.length === 0 ? (
+      <p class="weekly-empty">No reactions in this week yet — check back soon.</p>
+    ) : (
+      <ol class="weekly-list">
+        {rows.map((r, i) => (
+          <li class="weekly-row">
+            <span class="weekly-rank">{String(i + 1).padStart(2, '0')}</span>
+            <a href={permalinkUrl(r.meme.slug)} class="weekly-thumb">
+              <img src={memeUrl(r.meme.filename)} alt={displayTitle(r.meme)} loading="lazy" />
+            </a>
+            <div class="weekly-meta">
+              <a href={permalinkUrl(r.meme.slug)} class="weekly-meme-title">{displayTitle(r.meme)}</a>
+              <p class="weekly-tags">{r.meme.tags.slice(0, 5).map((t) => `#${t}`).join(' ')}</p>
+              <p class="weekly-counts">
+                <span>♥ {r.counts.heart}</span>
+                <span>😂 {r.counts.laugh}</span>
+                <span>⚡ {r.counts.bolt}</span>
+                <span>💎 {r.counts.diamond}</span>
+                <strong>{r.total} total</strong>
+              </p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    )}
+
+    <nav class="weekly-nav">
+      <a href={`${base}/week/`} class="btn ghost">← all weeks</a>
+      <a href={`${base}/`} class="btn ghost">gallery</a>
+    </nav>
+  </article>
+</Base>
