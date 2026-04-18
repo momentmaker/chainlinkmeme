@@ -31,7 +31,12 @@ const ogImage = `${siteUrl}/og/${meme.slug}.png`;
   <ThemeToggle client:load slot="header-actions" />
 
   <article class="permalink">
-    <img class="permalink-img" src={memeUrl(meme.filename)} alt={meme.title || meme.slug} />
+    <img
+      class="permalink-img"
+      src={memeUrl(meme.filename)}
+      alt={meme.title || meme.slug}
+      style={`view-transition-name: meme-${meme.slug};`}
+    />
     <div class="permalink-meta">
       <h1 class="permalink-title">{meme.title || meme.slug}</h1>
       {meme.description && <p>{meme.description}</p>}

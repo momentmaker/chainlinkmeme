@@ -33,7 +33,11 @@ function saveFavorites(favs: Set<string>) {
 
 export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 }: Props) {
   const [manifest, setManifest] = useState<Manifest | null>(null);
-  const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites());
+  // Start with an empty set on SSR and hydrate favorites from localStorage
+  // after mount — matches ThemeToggle's pattern and avoids the hydration
+  // mismatch on the Favorites pill count + disabled state.
+  const [favorites, setFavorites] = useState<Set<string>>(() => new Set());
+  useEffect(() => { setFavorites(loadFavorites()); }, []);
   const [query, setQuery] = useState('');
   const [animatedOnly, setAnimatedOnly] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
@@ -64,7 +68,22 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     [manifest, query, animatedOnly, favoritesOnly, favorites],
   );
 
-  const visible = filtered.slice(0, page * pageSize);
+  // Spotlight mode: when the query is active, render more cards than usual so
+  // the user sees a constellation of matches lit up against their dim
+  // neighbours — not a lonely filtered list. Matches always lead the order.
+  const queryActive = query.trim().length > 0;
+  const spotlightCap = pageSize * 3;
+  const visible = useMemo(() => {
+    if (!manifest) return [] as MemeEntry[];
+    if (!queryActive) return filtered.slice(0, page * pageSize);
+    const matchSet = new Set(filtered.map((m) => m.slug));
+    const nonMatches = manifest.memes.filter((m) => !matchSet.has(m.slug));
+    return [
+      ...filtered.slice(0, spotlightCap),
+      ...nonMatches.slice(0, Math.max(0, spotlightCap - filtered.length)),
+    ];
+  }, [manifest, filtered, queryActive, page, pageSize, spotlightCap]);
+  const matchLookup = useMemo(() => new Set(filtered.map((m) => m.slug)), [filtered]);
 
   useEffect(() => {
     setPage(1);
@@ -125,7 +144,15 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement && e.key !== 'Escape') return;
       if (modalSlug) {
-        if (e.key === 'Escape') setModalSlug(null);
+        if (e.key === 'Escape') { setModalSlug(null); return; }
+        if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'j') { stepModal(1); return; }
+        if (e.key === 'ArrowLeft' || e.key === 'h' || e.key === 'k') { stepModal(-1); return; }
+        if (e.key === 'c' && modalMeme) { copyPermalink(modalMeme.slug); return; }
+        if (e.key === 'f' && modalMeme) {
+          toggleFavorite(modalMeme.slug);
+          if (!favorites.has(modalMeme.slug)) incrementLike(modalMeme.slug);
+          return;
+        }
         return;
       }
       if (showHelp) {
@@ -156,11 +183,34 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onKey]);
+  // Intentional: stepModal / copyPermalink / favorites / etc. referenced inside
+  // onKey are already deps of the useCallback above; suppressing the eslint
+  // noise isn't worth a custom config file for this size of project.
+
+  // Carousel scope for modal arrow-key navigation. When a query is active the
+  // carousel only steps through matches; otherwise it walks the whole archive
+  // in manifest order.
+  const carouselList = useMemo(() => {
+    if (!manifest) return [] as MemeEntry[];
+    return queryActive ? filtered : manifest.memes;
+  }, [manifest, filtered, queryActive]);
 
   const modalMeme = useMemo(
     () => (modalSlug && manifest ? manifest.memes.find((m) => m.slug === modalSlug) ?? null : null),
     [modalSlug, manifest],
   );
+
+  const modalIndex = useMemo(
+    () => (modalSlug ? carouselList.findIndex((m) => m.slug === modalSlug) : -1),
+    [modalSlug, carouselList],
+  );
+
+  const stepModal = useCallback((dir: -1 | 1) => {
+    if (modalIndex < 0 || !carouselList.length) return;
+    const next = modalIndex + dir;
+    if (next < 0 || next >= carouselList.length) return;
+    setModalSlug(carouselList[next].slug);
+  }, [modalIndex, carouselList]);
 
   return (
     <>
@@ -193,6 +243,15 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
         </button>
       </div>
 
+      {queryActive && (
+        <div className="match-count">
+          <strong>{filtered.length}</strong> match{filtered.length === 1 ? '' : 'es'}
+          {filtered.length < manifest!.memes.length && (
+            <> · non-matches dimmed for context</>
+          )}
+        </div>
+      )}
+
       {visible.length === 0 ? (
         <p style={{ textAlign: 'center', color: 'var(--muted)', padding: '40px 0' }}>
           No memes match. Try a different tag or clear filters.
@@ -203,7 +262,10 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
             <Card
               key={m.slug}
               meme={m}
+              index={i}
               focused={i === focused}
+              lit={queryActive && matchLookup.has(m.slug)}
+              dim={queryActive && !matchLookup.has(m.slug)}
               liked={favorites.has(m.slug)}
               likeCount={likes[m.slug] ?? 0}
               innerRef={i === focused ? focusedCardRef : null}
@@ -218,7 +280,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
         </div>
       )}
 
-      {visible.length < filtered.length && (
+      {!queryActive && visible.length < filtered.length && (
         <div style={{ textAlign: 'center', marginTop: 24 }}>
           <button type="button" className="btn" onClick={() => setPage((p) => p + 1)}>
             𝚖⬡𝚛𝚎 𝚖𝚎𝚖𝚎 ({filtered.length - visible.length} more)
@@ -234,9 +296,24 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
           aria-modal="true"
           aria-label={modalMeme.title || modalMeme.slug}
         >
+          <button
+            type="button"
+            className="modal-nav prev"
+            onClick={(e) => { e.stopPropagation(); stepModal(-1); }}
+            disabled={modalIndex <= 0}
+            aria-label="Previous meme"
+          >‹</button>
+
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <img src={memeUrl(modalMeme.filename)} alt={modalMeme.title || modalMeme.slug} />
             <div className="modal-toolbar">
+              <div className="modal-position">
+                <strong>{modalIndex + 1}</strong> <span style={{ opacity: 0.6 }}>/ {carouselList.length}</span>
+                {modalMeme.tags.slice(0, 3).map((t) => (
+                  <span key={t} className="modal-tag">#{t}</span>
+                ))}
+              </div>
+              <div style={{ flex: 1 }} />
               <a className="btn ghost" href={permalinkUrl(modalMeme.slug)}>
                 open permalink →
               </a>
@@ -248,6 +325,14 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
               </button>
             </div>
           </div>
+
+          <button
+            type="button"
+            className="modal-nav next"
+            onClick={(e) => { e.stopPropagation(); stepModal(1); }}
+            disabled={modalIndex >= carouselList.length - 1}
+            aria-label="Next meme"
+          >›</button>
         </div>
       )}
 
@@ -260,7 +345,10 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
 
 interface CardProps {
   meme: MemeEntry;
+  index: number;
   focused: boolean;
+  lit: boolean;
+  dim: boolean;
   liked: boolean;
   likeCount: number;
   innerRef: React.Ref<HTMLDivElement> | null;
@@ -269,9 +357,17 @@ interface CardProps {
   onCopyLink: () => void;
 }
 
-function Card({ meme, focused, liked, likeCount, innerRef, onOpenModal, onToggleFavorite, onCopyLink }: CardProps) {
+function Card({ meme, index, focused, lit, dim, liked, likeCount, innerRef, onOpenModal, onToggleFavorite, onCopyLink }: CardProps) {
   return (
-    <div ref={innerRef ?? undefined} className={`card ${focused ? 'focused' : ''}`} role="listitem">
+    <div
+      ref={innerRef ?? undefined}
+      className="card"
+      data-focused={focused || undefined}
+      data-lit={lit || undefined}
+      data-dim={dim || undefined}
+      style={{ ['--card-i' as string]: Math.min(index, 30) }}
+      role="listitem"
+    >
       <a href={permalinkUrl(meme.slug)} onClick={(e) => { e.preventDefault(); onOpenModal(); }}>
         <img
           src={memeUrl(meme.filename)}
@@ -280,6 +376,7 @@ function Card({ meme, focused, liked, likeCount, innerRef, onOpenModal, onToggle
           decoding="async"
           width={meme.width || undefined}
           height={meme.height || undefined}
+          style={{ viewTransitionName: `meme-${meme.slug}` }}
         />
       </a>
       <div className="card-overlay">
@@ -351,6 +448,28 @@ export function ThemeToggle() {
       aria-label="Toggle theme"
     >
       {mounted ? (theme === 'dark' ? '☀︎' : '☾') : '◐'}
+    </button>
+  );
+}
+
+// Hexagon scroll-to-top — ported from chainlink-meme-react. Stays off-screen
+// at rest, slides in when scrollY > 100. Clicking smooth-scrolls to top.
+export function HexScrollTop() {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShown(window.scrollY > 100);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  return (
+    <button
+      type="button"
+      className={`hex-scroll ${shown ? 'toggled' : ''}`}
+      aria-label="Scroll to top"
+      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+    >
+      <span className="arrow" aria-hidden="true">▲</span>
     </button>
   );
 }

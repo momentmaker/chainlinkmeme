@@ -1,6 +1,7 @@
 ---
 import '../styles/base.css';
 import '../styles/theme-dark.css';
+import { ClientRouter } from 'astro:transitions';
 
 export interface Props {
   title: string;
@@ -27,6 +28,9 @@ const fullOg = ogImage ?? null;
     <meta name="description" content={description} />
     <link rel="canonical" href={fullCanonical} />
     <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
+    <link rel="icon" href={`${base}/favicon.ico`} sizes="32x32" />
+    <link rel="apple-touch-icon" href={`${base}/apple-touch-icon.png`} />
+    <link rel="manifest" href={`${base}/manifest.webmanifest`} />
 
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
@@ -54,6 +58,8 @@ const fullOg = ogImage ?? null;
 
     <slot name="head-extra" />
 
+    <ClientRouter fallback="animate" />
+
     <script
       is:inline
       src="https://beamanalytics.b-cdn.net/beam.min.js"
@@ -74,6 +80,7 @@ const fullOg = ogImage ?? null;
       </header>
       <slot />
       <footer class="footer">
+        <slot name="footer-stats" />
         <p>
           community-curated archive — <a href={`${base}/contribute/`}>submit a meme</a> ·
           <a href="https://github.com/momentmaker/chainlinkmeme" target="_blank" rel="noopener">source on github</a>

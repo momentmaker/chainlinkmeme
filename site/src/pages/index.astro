@@ -1,6 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
-import Gallery, { ThemeToggle, ProgressBar } from '../components/Gallery';
+import Gallery, { ThemeToggle, ProgressBar, HexScrollTop } from '../components/Gallery';
 import { memeOfDay } from '../lib/meme-of-day';
 import { memeUrl, permalinkUrl } from '../lib/meme-url';
 import type { Manifest } from '../lib/manifest';
@@ -13,6 +13,18 @@ const manifest = manifestJson as Manifest;
 const mod = memeOfDay(manifest.memes);
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const manifestHref = `${base}/manifest.json`;
+
+// Stats strip — computed at build time, shown once in the footer.
+const lastUpdated = [...manifest.memes]
+  .map((m) => m.date_added)
+  .filter(Boolean)
+  .sort()
+  .pop() ?? '';
+const stats = {
+  memes: manifest.memes.length.toLocaleString(),
+  tags: manifest.tags.length.toLocaleString(),
+  lastUpdated,
+};
 ---
 <Base
   title="⬡⏣⬢ chainlink meme ⬢⏣⬡"
@@ -39,4 +51,39 @@ const manifestHref = `${base}/manifest.json`;
   )}
 
   <Gallery client:load manifestUrl={manifestHref} />
+
+  <HexScrollTop client:load />
+
+  <p class="stats-strip" slot="footer-stats">
+    <span><strong>{stats.memes}</strong> memes</span>
+    <span class="dot">⬡</span>
+    <span><strong>{stats.tags}</strong> tags</span>
+    <span class="dot">⬡</span>
+    <span>last updated <strong>{stats.lastUpdated}</strong></span>
+  </p>
 </Base>
+
+<script>
+  // Cursor-reactive tilt + shine for the meme-of-the-day hero.
+  // Vanilla JS keeps the payload tiny — no react island needed for this one.
+  const hero = document.querySelector<HTMLElement>('.hero');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (hero && !reduce) {
+    const MAX_TILT = 5;
+    hero.addEventListener('mousemove', (e) => {
+      const r = hero.getBoundingClientRect();
+      const nx = (e.clientX - r.left) / r.width - 0.5;
+      const ny = (e.clientY - r.top) / r.height - 0.5;
+      hero.style.setProperty('--tilt-x', `${-ny * MAX_TILT}deg`);
+      hero.style.setProperty('--tilt-y', `${nx * MAX_TILT}deg`);
+      hero.style.setProperty('--shine-x', `${(nx + 0.5) * 100}%`);
+      hero.style.setProperty('--shine-y', `${(ny + 0.5) * 100}%`);
+      hero.style.setProperty('--shine-opacity', '1');
+    });
+    hero.addEventListener('mouseleave', () => {
+      hero.style.setProperty('--tilt-x', '0deg');
+      hero.style.setProperty('--tilt-y', '0deg');
+      hero.style.setProperty('--shine-opacity', '0');
+    });
+  }
+</script>
