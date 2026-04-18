@@ -307,47 +307,36 @@ a:hover { text-decoration: underline; }
 
 /* Hexagonal permalink-copy button pinned to the card's top-right. Only
    appears when the card is hovered/focused so the image reads clean at
-   rest. Matches the hex-btn header buttons so the brand language is
-   consistent across the site. */
+   rest. clip-path applied to the button itself (not a pseudo) to dodge
+   a Chromium compositing bug where backdrop-filter + scale transform
+   drops the clip-path on hover, leaving a blue square. */
 .card-link {
   position: absolute;
   top: 10px;
   right: 10px;
   width: 36px;
   height: 42px;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.6);
   border: none;
   padding: 0;
   cursor: pointer;
   opacity: 0;
   z-index: 3;
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-.card-link::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  transition: background 0.15s ease;
-}
-.card-link-icon {
-  position: relative;
-  z-index: 1;
-  font-size: 16px;
-  line-height: 1;
+  transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 100%;
+  color: white;
+}
+.card-link-icon {
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
 }
 .card:hover .card-link,
 .card[data-focused] .card-link { opacity: 1; }
-.card-link:hover { transform: scale(1.1); }
-.card-link:hover::before { background: rgba(47, 98, 223, 0.85); }
+.card-link:hover { background: rgba(47, 98, 223, 0.9); transform: scale(1.1); }
 .card-link:focus-visible { opacity: 1; outline: none; filter: drop-shadow(0 0 3px rgba(47, 98, 223, 0.7)); }
 
 .like-btn, .tag-btn {
