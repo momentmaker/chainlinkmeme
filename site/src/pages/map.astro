@@ -1,0 +1,25 @@
+---
+import Base from '../layouts/Base.astro';
+import { ThemeToggle } from '../components/Gallery';
+import Constellation from '../components/Constellation';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const manifestHref = `${base}/manifest.json`;
+---
+<Base
+  title="⬢ tag constellation — chainlink meme"
+  description="The archive rendered as a constellation — tags are stars, co-occurring tags are connected. Click to filter the gallery."
+>
+  <ThemeToggle client:load slot="header-actions" />
+  <article class="map-page">
+    <header class="map-header">
+      <p class="weekly-eyebrow">⬢ tag constellation</p>
+      <h1 class="map-title">the archive as a cosmos</h1>
+      <p class="map-sub">tags are stars · edges are co-occurrences · click a star to search</p>
+    </header>
+    <Constellation client:load manifestUrl={manifestHref} />
+    <div class="map-footnote">
+      <a href={`${base}/`} class="btn ghost">← back to gallery</a>
+    </div>
+  </article>
+</Base>
