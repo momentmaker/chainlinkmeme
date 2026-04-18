@@ -79,8 +79,10 @@ const fullOg = ogImage ?? null;
     <slot name="progress" />
     <main class="page">
       <header class="header">
-        <a class="brand" href={`${base}/`}>⬡⏣⬢ chainlink meme ⬢⏣⬡</a>
-        <span class="tagline">cosmic memes by linkmarines, for chainlink</span>
+        <div class="brand-stack">
+          <a class="brand" href={`${base}/`}>⬡⏣⬢ chainlink meme ⬢⏣⬡</a>
+          <span class="tagline">cosmic memes by linkmarines, for chainlink</span>
+        </div>
         <div class="right">
           <slot name="header-actions" />
           <a href={`${base}/map/`} class="hex-btn" aria-label="Tag constellation" title="Tag constellation — the archive as a cosmos">
