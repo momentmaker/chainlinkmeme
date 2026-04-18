@@ -21,10 +21,19 @@ interface Meme {
   height: number;
 }
 
+const FONT_URLS = [
+  'https://rsms.me/inter/font-files/Inter-Bold.woff2',
+  'https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2',
+];
+
 async function loadFont(): Promise<ArrayBuffer> {
-  const res = await fetch('https://fonts.gstatic.com/s/inter/v13/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2');
-  if (!res.ok) throw new Error('font fetch failed');
-  return res.arrayBuffer();
+  for (const url of FONT_URLS) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return res.arrayBuffer();
+    } catch { /* try next */ }
+  }
+  throw new Error('font fetch failed');
 }
 
 function readImageAsDataUrl(filename: string): string {
@@ -97,7 +106,17 @@ async function main() {
   }
   const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8')) as { memes: Meme[] };
   fs.mkdirSync(OG_DIR, { recursive: true });
-  const font = await loadFont();
+
+  // OG images unfurl permalinks in Discord/Twitter. A broken font source
+  // shouldn't block a deploy; degrade gracefully and pick up fresh OGs on the
+  // next successful build.
+  let font: ArrayBuffer;
+  try {
+    font = await loadFont();
+  } catch (err) {
+    console.warn(`[og] skipping OG generation: ${(err as Error).message}`);
+    return;
+  }
 
   let rendered = 0;
   let skipped = 0;
