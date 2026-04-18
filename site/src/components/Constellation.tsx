@@ -160,8 +160,8 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     return { nodes, edges, maxCount: mc };
   }, [manifest]);
 
-  // Animation loop — runs physics + redraws the canvas. Disabled if
-  // prefers-reduced-motion is set (just settles the layout in one pass).
+  // Animation loop — runs physics + redraws the canvas. Honors
+  // prefers-reduced-motion by converging faster (fewer iterations).
   useEffect(() => {
     const canvas = canvasRef.current;
     const wrapper = wrapperRef.current;
@@ -178,6 +178,14 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     const KE_THRESHOLD = 0.08;
     const MIN_SETTLE_ITERS = reduce ? 30 : 80;
 
+    // Separate "needs redraw" signal for after the physics has settled —
+    // hover + pan/zoom changes flip this on and the next frame picks it up
+    // without paying to re-run the force sim.
+    let settled = false;
+    let needsRedraw = true;
+    const markDirty = () => { needsRedraw = true; };
+    markDirtyRef.current = markDirty;
+
     let currentDpr = window.devicePixelRatio || 1;
     function resize() {
       const rect = wrapper!.getBoundingClientRect();
@@ -186,17 +194,13 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
       canvas!.height = rect.height * currentDpr;
       canvas!.style.width = rect.width + 'px';
       canvas!.style.height = rect.height + 'px';
+      // Writing to canvas.width clears the bitmap — force a redraw even if
+      // the sim has already settled, otherwise the canvas stays blank after
+      // a window resize.
+      markDirty();
     }
     resize();
     window.addEventListener('resize', resize);
-
-    // Separate "needs redraw" signal for after the physics has settled —
-    // hover + pan/zoom changes flip this on and the next frame picks it up
-    // without paying to re-run the force sim.
-    let settled = false;
-    let needsRedraw = true;
-    const markDirty = () => { needsRedraw = true; };
-    markDirtyRef.current = markDirty;
 
     function draw() {
       const rect = wrapper!.getBoundingClientRect();
@@ -272,6 +276,7 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     // mouse stays put. preventDefault requires a non-passive listener.
     const onWheel = (ev: WheelEvent) => {
       ev.preventDefault();
+      if (ev.deltaY === 0) return;
       const rect = canvas!.getBoundingClientRect();
       const mx = ev.clientX - rect.left;
       const my = ev.clientY - rect.top;
@@ -298,6 +303,10 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
       d.origTy = viewRef.current.ty;
       canvas!.setPointerCapture(ev.pointerId);
       canvas!.style.cursor = 'grabbing';
+      // Pointer capture suppresses onPointerLeave for the duration of the
+      // drag, so explicitly drop any hover state when a pan begins — the
+      // hover card shouldn't linger over a moving graph.
+      setHoverTag(null);
     };
     const onPointerMoveNative = (ev: PointerEvent) => {
       const d = dragRef.current;
