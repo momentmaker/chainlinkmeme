@@ -37,10 +37,17 @@ function displayTitle(m: MemeEntry): string {
 }
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+// Per-week OG card. Only emitted when the snapshot has at least one entry
+// (build-og-images.ts returns null for empties), so we skip advertising a
+// nonexistent image for quiet weeks and let Base fall back to no og:image.
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://chainlinkme.me';
+const weekOg = rows.length > 0 ? `${siteUrl}/og/week-${snap.week}.png` : undefined;
 ---
 <Base
   title={`⬢ ${snap.week} — chainlink meme`}
-  description={`Top 7 memes for ${snap.week} (${snap.start} → ${snap.end})`}
+  description={`Top ${rows.length} memes for ${snap.week} (${snap.start} → ${snap.end})`}
+  ogImage={weekOg}
 >
   <ThemeToggle client:load slot="header-actions" />
   <article class="weekly">

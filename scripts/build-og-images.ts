@@ -356,6 +356,150 @@ async function renderHomeCard(memes: Meme[], tagCount: number, manifestTime: str
   return Buffer.from(new Resvg(svg).render().asPng());
 }
 
+// Weekly top-N OG card. One image per committed snapshot in
+// site/src/data/weekly/*.json. Responsive row: 1 big tile through 7
+// narrow tiles, centered horizontally, with a cap so the N=1 case
+// doesn't sprawl.
+interface WeeklyTopEntry { slug: string; total: number; }
+interface WeeklySnapshot { week: string; start: string; end: string; top: WeeklyTopEntry[]; }
+
+async function renderWeeklyCard(snap: WeeklySnapshot, memesBySlug: Map<string, Meme>, font: ArrayBuffer): Promise<Buffer | null> {
+  const CANVAS_W = 1200, CANVAS_H = 630;
+  const usable = snap.top
+    .map((e) => ({ entry: e, meme: memesBySlug.get(e.slug) }))
+    .filter((r): r is { entry: WeeklyTopEntry; meme: Meme } => !!r.meme);
+  if (usable.length === 0) return null;
+
+  const N = usable.length;
+  const gap = 16;
+  const padX = 48;
+  const usableW = CANVAS_W - padX * 2;
+  const maxTile = 280;
+  const tileW = Math.min(maxTile, Math.floor((usableW - gap * (N - 1)) / N));
+  const tileH = tileW;
+  const rowW = tileW * N + gap * (N - 1);
+  const rowX = Math.round((CANVAS_W - rowW) / 2);
+  const rowY = 210;
+
+  const tiles = usable.map((r, i) => {
+    const thumb = thumbnailDataUrl(r.meme.filename, tileW, tileH);
+    return {
+      type: 'div', props: {
+        style: {
+          position: 'absolute', left: rowX + i * (tileW + gap), top: rowY,
+          width: tileW, height: tileH, display: 'flex',
+          borderRadius: 10, overflow: 'hidden',
+          border: '2px solid rgba(255,255,255,0.2)',
+          boxShadow: '0 10px 24px rgba(0,0,0,0.35)',
+        },
+        children: [
+          { type: 'img', props: { src: thumb, width: tileW, height: tileH, style: { objectFit: 'cover' } } },
+          // rank badge (top-left)
+          {
+            type: 'div', props: {
+              style: {
+                position: 'absolute', top: 8, left: 8, padding: '4px 8px',
+                background: 'rgba(15, 23, 42, 0.85)', color: 'white',
+                fontSize: 14, fontWeight: 700, borderRadius: 6,
+                display: 'flex', alignItems: 'center',
+              },
+              children: String(i + 1),
+            },
+          },
+          // reaction total (bottom-right)
+          {
+            type: 'div', props: {
+              style: {
+                position: 'absolute', bottom: 8, right: 8, padding: '3px 8px',
+                background: 'rgba(47, 98, 223, 0.9)', color: 'white',
+                fontSize: 13, fontWeight: 700, borderRadius: 6,
+                display: 'flex', alignItems: 'center', gap: 4,
+              },
+              children: `${r.entry.total}`,
+            },
+          },
+        ],
+      },
+    };
+  });
+
+  const subtitle = N === 1 ? 'the top meme' : `the ${N} most reacted memes`;
+
+  const tree = {
+    type: 'div', props: {
+      style: {
+        width: CANVAS_W, height: CANVAS_H, position: 'relative', display: 'flex',
+        fontFamily: 'Inter', color: 'white',
+        background: 'linear-gradient(135deg, #2f62df 0%, #1a3ba7 60%, #0d2270 100%)',
+      },
+      children: [
+        // Eyebrow
+        {
+          type: 'div', props: {
+            style: {
+              position: 'absolute', top: 48, left: 0, right: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              gap: 10, fontSize: 22, fontWeight: 700, letterSpacing: 4,
+              textTransform: 'uppercase', opacity: 0.9,
+            },
+            children: [
+              hexImg(16, 'white', 0.95, false),
+              hexImg(16, 'white', 0.95, true),
+              hexImg(16, 'white', 0.95, false),
+              { type: 'span', props: { style: { display: 'flex', margin: '0 6px' }, children: 'weekly stack' } },
+              hexImg(16, 'white', 0.95, false),
+              hexImg(16, 'white', 0.95, true),
+              hexImg(16, 'white', 0.95, false),
+            ],
+          },
+        },
+        // Title
+        {
+          type: 'div', props: {
+            style: {
+              position: 'absolute', top: 100, left: 0, right: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 72, fontWeight: 800, letterSpacing: -2,
+            },
+            children: snap.week,
+          },
+        },
+        // Subtitle (date range + count)
+        {
+          type: 'div', props: {
+            style: {
+              position: 'absolute', top: 180, left: 0, right: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              gap: 16, fontSize: 18, fontWeight: 600, opacity: 0.7,
+            },
+            children: `${snap.start} → ${snap.end} · ${subtitle}`,
+          },
+        },
+        // Tiles row
+        ...tiles,
+        // Footer permalink
+        {
+          type: 'div', props: {
+            style: {
+              position: 'absolute', bottom: 40, left: 0, right: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 20, fontWeight: 600, opacity: 0.55, letterSpacing: 1,
+            },
+            children: `chainlinkme.me/week/${snap.week}`,
+          },
+        },
+      ],
+    },
+  };
+
+  const svg = await satori(tree as unknown as Parameters<typeof satori>[0], {
+    width: CANVAS_W,
+    height: CANVAS_H,
+    fonts: [{ name: 'Inter', data: font, style: 'normal', weight: 800 }],
+  });
+  return Buffer.from(new Resvg(svg).render().asPng());
+}
+
 async function main() {
   if (!fs.existsSync(MANIFEST_PATH)) {
     console.error('[og] no manifest.json — run build-manifest.ts first');
@@ -436,6 +580,30 @@ async function main() {
     console.log('[og] _x-banner.png rendered');
   } catch (err) {
     console.error(`[og] x banner: ${(err as Error).message}`);
+  }
+
+  // Weekly snapshot OGs — one per committed week in site/src/data/weekly/.
+  // Cheap: only 1 tiny PNG per week, and it's what the Monday cron shares
+  // to X as a single-tweet link. Always re-render so a meme's thumbnail
+  // reflects its current file (e.g. someone re-uploads a higher-res copy).
+  const WEEKLY_DIR = path.join(ROOT, 'site', 'src', 'data', 'weekly');
+  if (fs.existsSync(WEEKLY_DIR)) {
+    const memesBySlug = new Map<string, Meme>(manifest.memes.map((m) => [m.slug, m]));
+    const snapFiles = fs.readdirSync(WEEKLY_DIR).filter((f) => f.endsWith('.json')).sort();
+    for (const file of snapFiles) {
+      try {
+        const snap = JSON.parse(fs.readFileSync(path.join(WEEKLY_DIR, file), 'utf8')) as WeeklySnapshot;
+        const png = await renderWeeklyCard(snap, memesBySlug, font);
+        if (!png) {
+          console.log(`[og] weekly ${snap.week}: empty snapshot, skipping`);
+          continue;
+        }
+        fs.writeFileSync(path.join(OG_DIR, `week-${snap.week}.png`), png);
+        console.log(`[og] week-${snap.week}.png rendered`);
+      } catch (err) {
+        console.error(`[og] weekly ${file}: ${(err as Error).message}`);
+      }
+    }
   }
 }
 

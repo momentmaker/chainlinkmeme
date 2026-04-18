@@ -79,9 +79,9 @@ jobs:
           # changes. `restore-keys` happily falls back to an older cache
           # within the same version, and because the build script skips
           # existing PNGs it'll never re-render stale designs otherwise.
-          key: og-v2-${{ hashFiles('memes/**/*.toml', 'scripts/build-og-images.ts', 'scripts/assets/*') }}
+          key: og-v3-${{ hashFiles('memes/**/*.toml', 'scripts/build-og-images.ts', 'scripts/assets/*', 'site/src/data/weekly/*.json') }}
           restore-keys: |
-            og-v2-
+            og-v3-
 
       - name: Build OG images
         run: pnpm og
