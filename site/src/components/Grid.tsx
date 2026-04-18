@@ -398,6 +398,10 @@ export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
     if (dragRef.current.moved) { dragRef.current.moved = false; return; }
     const t = findTile(e.clientX, e.clientY);
     if (!t) return;
+    try {
+      const w = window as unknown as { umami?: { track: (n: string, d?: Record<string, unknown>) => void } };
+      w.umami?.track('grid-click', { slug: t.meme.slug });
+    } catch { /* ignore */ }
     const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     const target = `${base}/m/${t.meme.slug}/`;
     try {

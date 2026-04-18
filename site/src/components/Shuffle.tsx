@@ -22,6 +22,13 @@ function pickRandom(memes: MemeEntry[], avoidSlug?: string): MemeEntry {
   return memes[Math.floor(Math.random() * memes.length)]!;
 }
 
+function track(name: string, data?: Record<string, unknown>): void {
+  try {
+    const w = window as unknown as { umami?: { track: (n: string, d?: Record<string, unknown>) => void } };
+    w.umami?.track(name, data);
+  } catch { /* ignore */ }
+}
+
 export default function Shuffle({ manifestUrl = '/manifest.json' }: Props) {
   const [open, setOpen] = useState(false);
   const [manifest, setManifest] = useState<Manifest | null>(null);
@@ -68,6 +75,7 @@ export default function Shuffle({ manifestUrl = '/manifest.json' }: Props) {
       const next = pickRandom(m.memes, last?.slug);
       const appended = [...prev, next];
       setCursor(appended.length - 1);
+      track('shuffle-advance', { slug: next.slug, depth: appended.length });
       return appended;
     });
   }, [loadManifest]);
@@ -80,8 +88,12 @@ export default function Shuffle({ manifestUrl = '/manifest.json' }: Props) {
   }, []);
 
   const openShuffle = useCallback(async (): Promise<void> => {
+    const firstOpen = historyLenRef.current === 0;
     setOpen(true);
-    if (historyLenRef.current === 0) await advance();
+    if (firstOpen) {
+      track('shuffle-open');
+      await advance();
+    }
   }, [advance]);
 
   useEffect(() => {
