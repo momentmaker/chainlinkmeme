@@ -1,6 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro';
-import { ThemeToggle } from '../../components/Gallery';
+import { ThemeToggle, PermalinkReactions } from '../../components/Gallery';
 import { memeUrl, permalinkUrl } from '../../lib/meme-url';
 import type { Manifest, MemeEntry } from '../../lib/manifest';
 import manifestJson from '../../../public/manifest.json';
@@ -52,12 +52,28 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   <ThemeToggle client:load slot="header-actions" />
 
   <article class="permalink">
-    <img
-      class="permalink-img"
-      src={memeUrl(meme.filename)}
-      alt={meme.title || meme.slug}
-      style={`view-transition-name: meme-${meme.slug};`}
-    />
+    <div class="permalink-stage">
+      <img
+        class="permalink-img"
+        src={memeUrl(meme.filename)}
+        alt={meme.title || meme.slug}
+        style={`view-transition-name: meme-${meme.slug};`}
+      />
+      <!-- Copy-link hex — mirrors the gallery card's top-right action slot. -->
+      <div class="permalink-overlay-top-right">
+        <button
+          type="button"
+          class="card-link"
+          data-permalink
+          aria-label="Copy permalink"
+          title="Copy permalink"
+        >
+          <span class="card-link-icon" aria-hidden="true">🔗</span>
+        </button>
+      </div>
+      <!-- Reactions island — hydrates in-place; matches the card's overlay. -->
+      <PermalinkReactions client:load slug={meme.slug} />
+    </div>
     <div class="permalink-meta">
       <h1 class="permalink-title">{displayTitle}</h1>
       {meme.description && <p class="permalink-description">{meme.description}</p>}
@@ -78,7 +94,6 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
         </p>
       )}
       <div class="permalink-actions">
-        <button type="button" class="btn copy-link-btn" data-permalink>copy link</button>
         <button type="button" class="btn ghost" data-download data-url={memeUrl(meme.filename)} data-filename={meme.filename}>download</button>
         <button type="button" class="btn ghost" data-sticker data-url={memeUrl(meme.filename)} data-slug={meme.slug} data-animated={meme.animated ? '1' : '0'}>save as sticker</button>
         <a class="btn ghost"
@@ -121,13 +136,18 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
       const copyBtn = document.querySelector<HTMLButtonElement>('[data-permalink]');
       if (copyBtn && !copyBtn.dataset.bound) {
         copyBtn.dataset.bound = '1';
-        copyBtn.addEventListener('click', async () => {
+        const icon = copyBtn.querySelector<HTMLElement>('.card-link-icon');
+        const defaultIcon = icon?.textContent ?? '🔗';
+        copyBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
           try {
             await navigator.clipboard.writeText(window.location.href);
-            copyBtn.textContent = '✓ copied';
-            setTimeout(() => { copyBtn.textContent = 'copy link'; }, 1500);
+            if (icon) { icon.textContent = '✓'; }
+            setTimeout(() => { if (icon) icon.textContent = defaultIcon; }, 1500);
           } catch {
-            copyBtn.textContent = 'copy failed';
+            if (icon) { icon.textContent = '✗'; }
+            setTimeout(() => { if (icon) icon.textContent = defaultIcon; }, 1500);
           }
         });
       }
@@ -256,8 +276,41 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
       });
     }
 
+    // Cursor-reactive 3D tilt for the permalink image — same language as the
+    // home hero. Skipped on touch devices (no hover) and for reduced-motion
+    // users. Re-binds on astro:page-load since ClientRouter swaps bodies
+    // without re-running this module script.
+    function wirePermalinkTilt() {
+      const stage = document.querySelector<HTMLElement>('.permalink-stage');
+      if (!stage || stage.dataset.tiltBound === '1') return;
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      if (window.matchMedia('(hover: none)').matches) return;
+      stage.dataset.tiltBound = '1';
+      const MAX_TILT = 4;
+      stage.addEventListener('mousemove', (e) => {
+        const r = stage.getBoundingClientRect();
+        const nx = (e.clientX - r.left) / r.width - 0.5;
+        const ny = (e.clientY - r.top) / r.height - 0.5;
+        stage.style.setProperty('--tilt-x', `${-ny * MAX_TILT}deg`);
+        stage.style.setProperty('--tilt-y', `${nx * MAX_TILT}deg`);
+        stage.style.setProperty('--shine-x', `${(nx + 0.5) * 100}%`);
+        stage.style.setProperty('--shine-y', `${(ny + 0.5) * 100}%`);
+        stage.style.setProperty('--shine-opacity', '1');
+      });
+      stage.addEventListener('mouseleave', () => {
+        stage.style.setProperty('--tilt-x', '0deg');
+        stage.style.setProperty('--tilt-y', '0deg');
+        stage.style.setProperty('--shine-opacity', '0');
+      });
+    }
+
     wirePermalinkActions();
     wireSticker();
-    document.addEventListener('astro:page-load', () => { wirePermalinkActions(); wireSticker(); });
+    wirePermalinkTilt();
+    document.addEventListener('astro:page-load', () => {
+      wirePermalinkActions();
+      wireSticker();
+      wirePermalinkTilt();
+    });
   </script>
 </Base>

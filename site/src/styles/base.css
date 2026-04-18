@@ -399,10 +399,35 @@ a:hover { text-decoration: underline; }
   transition: transform 0.12s ease, background 0.15s ease;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  position: relative;  /* anchor for drifting reaction-particle */
 }
 .reaction-btn:hover { background: rgba(0, 0, 0, 0.7); transform: scale(1.1); }
 .reaction-btn:active { transform: scale(0.92); }
 .reaction-btn.liked { background: rgba(47, 98, 223, 0.85); }
+
+/* Drifting reaction particle — the button spawns one of these imperatively
+   on tap. Floats up, drifts laterally via --drift, fades, self-removes. */
+.reaction-particle {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translate(-50%, 0);
+  pointer-events: none;
+  font-size: 22px;
+  line-height: 1;
+  z-index: 3;
+  animation: reaction-float 900ms ease-out forwards;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.45));
+  --drift: 0px;
+}
+@keyframes reaction-float {
+  0%   { opacity: 0; transform: translate(calc(-50% + (var(--drift) * 0)), 4px) scale(0.6); }
+  15%  { opacity: 1; transform: translate(calc(-50% + (var(--drift) * 0.2)), -6px) scale(1.15); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--drift)), -64px) scale(1.4); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reaction-particle { display: none; }
+}
 .reaction-icon {
   font-size: 16px;
   line-height: 1;
@@ -709,12 +734,13 @@ a:hover { text-decoration: underline; }
 .modal-content {
   max-width: 92vw;
   max-height: 92vh;
-  background: white;
+  background: transparent;
   border: 2px ridge var(--brand-blue);
   border-radius: 8px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 .modal-content img {
   max-width: 100%;
@@ -728,7 +754,11 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  background: black;
+  text-decoration: none;
 }
+.modal-img-wrap:hover { text-decoration: none; }
 .modal-img-wrap.loading::after {
   content: "";
   position: absolute;
@@ -750,35 +780,51 @@ a:hover { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) {
   .modal-img-wrap.loading::after { animation: none; }
 }
-.modal-toolbar {
-  padding: 10px 14px;
+/* Modal overlays — mirror the gallery card's visual language so opening a
+   meme is a zoom, not a mode switch. All four corners use the same patterns
+   the card exposes: hex actions top-right, metadata pill top-left,
+   reactions bottom. */
+.modal-overlay-top-left,
+.modal-overlay-top-right,
+.modal-overlay-bottom {
+  position: absolute;
+  z-index: 2;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
-  justify-content: flex-end;
-  border-top: 1px solid var(--card-border);
-  flex-wrap: wrap;
+  pointer-events: none;  /* container passes through; children opt in */
 }
-.modal-position {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--muted);
+.modal-overlay-top-left > *,
+.modal-overlay-top-right > *,
+.modal-overlay-bottom > * { pointer-events: auto; }
+.modal-overlay-top-left { top: 12px; left: 12px; flex-wrap: wrap; max-width: 60%; }
+.modal-overlay-top-right { top: 12px; right: 12px; }
+.modal-overlay-bottom {
+  bottom: 12px; left: 12px; right: 12px;
+  justify-content: space-between;
+}
+.modal-position-pill {
+  padding: 4px 10px;
+  background: rgba(0, 0, 0, 0.65);
+  color: white;
+  border-radius: 999px;
   font-family: Menlo, Monaco, monospace;
   font-size: 12px;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
-.modal-position strong {
-  color: var(--brand-blue);
-  font-weight: 700;
-  font-size: 14px;
-}
+.modal-position-pill strong { color: white; font-weight: 700; }
 .modal-tag {
-  color: var(--brand-blue);
+  color: white;
   font-weight: 600;
   font-size: 11px;
-  padding: 2px 8px;
-  background: rgba(47,98,223,0.12);
+  padding: 3px 9px;
+  background: rgba(47,98,223,0.75);
   border-radius: 999px;
+  backdrop-filter: blur(6px);
 }
 .modal-nav {
   position: fixed;
@@ -819,6 +865,33 @@ a:hover { text-decoration: underline; }
   margin: 0 auto;
   text-align: center;
 }
+/* The permalink stage wraps the image so we can apply cursor-reactive
+   tilt + shine (matching the home hero) and absolutely-position the
+   overlay actions (copy link, reactions) on the image itself — same
+   visual language as the gallery card. */
+.permalink-stage {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: 12px;
+  transform-style: preserve-3d;
+  transform: perspective(1400px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+  transition: transform 0.25s cubic-bezier(.2,.8,.2,1);
+  will-change: transform;
+}
+.permalink-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at var(--shine-x, 50%) var(--shine-y, 50%), rgba(255,255,255,0.22), transparent 55%);
+  opacity: var(--shine-opacity, 0);
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  border-radius: inherit;
+  z-index: 3;
+}
 .permalink-img {
   display: block;
   max-width: 100%;
@@ -829,8 +902,39 @@ a:hover { text-decoration: underline; }
   background: white;
   box-shadow: 0 20px 40px rgba(0,0,0,0.12);
   object-fit: contain;
+  transform: translateZ(10px);
 }
 [data-theme="dark"] .permalink-img { background: #1a1f2a; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+
+/* Overlays on the permalink stage mirror the gallery card: copy-link hex
+   top-right, reactions + total at the bottom. */
+.permalink-overlay-top-right {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  z-index: 4;
+  transform: translateZ(40px);
+}
+.permalink-overlay-bottom {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  z-index: 4;
+  pointer-events: none;
+  transform: translateZ(40px);
+}
+.permalink-overlay-bottom > * { pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .permalink-stage { transform: none; transition: none; }
+  .permalink-stage::after { display: none; }
+}
 
 .permalink-meta { margin-top: 24px; }
 .permalink-title {

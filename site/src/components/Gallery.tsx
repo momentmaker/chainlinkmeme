@@ -43,6 +43,21 @@ function fmtCount(n: number): string {
 // invalidates React.memo boundaries and hurts perf at scale.
 const EMPTY_REACTIONS: ReactionCounts = Object.freeze({ heart: 0, laugh: 0, bolt: 0, diamond: 0 }) as ReactionCounts;
 
+// Spawn a small drifting-up icon on top of a reaction button. Imperative so
+// rapid taps don't thrash React state — each particle is a plain DOM node
+// that removes itself when its CSS animation ends. Targets should be
+// `position: relative` so the particle can anchor inside.
+function burstReactionParticle(target: HTMLElement, icon: string): void {
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  const el = document.createElement('span');
+  el.className = 'reaction-particle';
+  el.textContent = icon;
+  // Jitter the lateral drift so repeated taps don't stack perfectly.
+  el.style.setProperty('--drift', `${(Math.random() - 0.5) * 30}px`);
+  target.appendChild(el);
+  el.addEventListener('animationend', () => el.remove());
+}
+
 // Umami custom-event helper — fire-and-forget. Wrapped so the rest of the
 // code can call `track('x')` without null-checking window.umami at every site.
 interface UmamiWindow { umami?: { track: (name: string, data?: Record<string, unknown>) => void } }
@@ -630,62 +645,147 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
         ) : null
       )}
 
-      {modalMeme && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setModalSlug(null)}
-          role="dialog"
-          aria-modal="true"
-          aria-label={modalMeme.title || modalMeme.slug}
-        >
-          <button
-            type="button"
-            className="modal-nav prev"
-            onClick={(e) => { e.stopPropagation(); stepModal(-1); }}
-            disabled={modalIndex <= 0}
-            aria-label="Previous meme"
-          >‹</button>
+      {modalMeme && (() => {
+        const rs = reactions[modalMeme.slug] ?? EMPTY_REACTIONS;
+        const total = rs.heart + rs.laugh + rs.bolt + rs.diamond;
+        const liked = favorites.has(modalMeme.slug);
+        // Swipe handlers kept inline so they close over the current modal's
+        // stepModal + list bounds without extra plumbing.
+        let swipeX = 0, swipeY = 0, swipeT = 0;
+        const onTouchStart = (e: React.TouchEvent) => {
+          const t = e.touches[0];
+          if (!t) return;
+          swipeX = t.clientX; swipeY = t.clientY; swipeT = Date.now();
+        };
+        const onTouchEnd = (e: React.TouchEvent) => {
+          const t = e.changedTouches[0];
+          if (!t) return;
+          const dx = t.clientX - swipeX;
+          const dy = t.clientY - swipeY;
+          const dt = Date.now() - swipeT;
+          // Horizontal swipe only: needs to travel ≥ 40px, be faster than
+          // 600ms, and be clearly more horizontal than vertical (so
+          // vertical scrolls don't accidentally flip cards).
+          if (dt > 600) return;
+          if (Math.abs(dx) < 40) return;
+          if (Math.abs(dx) < Math.abs(dy) * 1.5) return;
+          stepModal(dx > 0 ? -1 : 1);
+        };
+        const openPermalink = (e: React.MouseEvent) => {
+          e.preventDefault();
+          setModalSlug(null);
+          window.location.href = permalinkUrl(modalMeme.slug);
+        };
+        return (
+          <div
+            className="modal-backdrop"
+            onClick={() => setModalSlug(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-label={modalMeme.title || modalMeme.slug}
+          >
+            <button
+              type="button"
+              className="modal-nav prev"
+              onClick={(e) => { e.stopPropagation(); stepModal(-1); }}
+              disabled={modalIndex <= 0}
+              aria-label="Previous meme"
+            >‹</button>
 
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className={`modal-img-wrap ${modalLoading ? 'loading' : ''}`}>
-              <img
-                key={modalMeme.slug}
-                src={memeUrl(modalMeme.filename)}
-                alt={modalMeme.title || modalMeme.slug}
-                onLoad={() => setModalLoading(false)}
-                decoding="async"
-                fetchPriority="high"
-              />
-            </div>
-            <div className="modal-toolbar">
-              <div className="modal-position">
-                <strong>{modalIndex + 1}</strong> <span style={{ opacity: 0.6 }}>/ {carouselList.length}</span>
+            <div
+              className="modal-content"
+              onClick={(e) => e.stopPropagation()}
+              onTouchStart={onTouchStart}
+              onTouchEnd={onTouchEnd}
+            >
+              <a
+                className={`modal-img-wrap ${modalLoading ? 'loading' : ''}`}
+                href={permalinkUrl(modalMeme.slug)}
+                onClick={openPermalink}
+                aria-label={`Open permalink for ${modalMeme.title || modalMeme.slug}`}
+              >
+                <img
+                  key={modalMeme.slug}
+                  src={memeUrl(modalMeme.filename)}
+                  alt={modalMeme.title || modalMeme.slug}
+                  onLoad={() => setModalLoading(false)}
+                  decoding="async"
+                  fetchPriority="high"
+                />
+              </a>
+
+              {/* Top-left: position pill + tags */}
+              <div className="modal-overlay-top-left">
+                <span className="modal-position-pill">
+                  <strong>{modalIndex + 1}</strong><span style={{ opacity: 0.6 }}>/{carouselList.length}</span>
+                </span>
                 {modalMeme.tags.slice(0, 3).map((t) => (
                   <span key={t} className="modal-tag">#{t}</span>
                 ))}
               </div>
-              <div style={{ flex: 1 }} />
-              <a className="btn ghost" href={permalinkUrl(modalMeme.slug)}>
-                open permalink →
-              </a>
-              <button type="button" className="btn" onClick={() => copyPermalink(modalMeme.slug)}>
-                copy link
-              </button>
-              <button type="button" className="btn ghost" onClick={() => setModalSlug(null)}>
-                close
-              </button>
-            </div>
-          </div>
 
-          <button
-            type="button"
-            className="modal-nav next"
-            onClick={(e) => { e.stopPropagation(); stepModal(1); }}
-            disabled={modalIndex >= carouselList.length - 1}
-            aria-label="Next meme"
-          >›</button>
-        </div>
-      )}
+              {/* Top-right: hex copy-link + hex close */}
+              <div className="modal-overlay-top-right">
+                <button
+                  type="button"
+                  className="card-link"
+                  onClick={(e) => { e.stopPropagation(); copyPermalink(modalMeme.slug); }}
+                  aria-label="Copy permalink"
+                  title="Copy permalink"
+                >
+                  <span className="card-link-icon" aria-hidden="true">🔗</span>
+                </button>
+                <button
+                  type="button"
+                  className="card-link"
+                  onClick={(e) => { e.stopPropagation(); setModalSlug(null); }}
+                  aria-label="Close"
+                  title="Close (Esc)"
+                >
+                  <span className="card-link-icon" aria-hidden="true">×</span>
+                </button>
+              </div>
+
+              {/* Bottom: reactions + total */}
+              <div className="modal-overlay-bottom">
+                <div className="reaction-row" role="group" aria-label="Reactions">
+                  {REACTIONS.map((rx) => (
+                    <button
+                      key={rx}
+                      type="button"
+                      className={`reaction-btn ${rx === 'heart' && liked ? 'liked' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        burstReactionParticle(e.currentTarget, REACTION_ICON[rx]);
+                        if (rx === 'heart') toggleFavorite(modalMeme.slug);
+                        else incrementReaction(modalMeme.slug, rx);
+                      }}
+                      aria-label={`React with ${REACTION_LABEL[rx]}`}
+                      title={REACTION_LABEL[rx]}
+                    >
+                      <span className="reaction-icon" aria-hidden="true">{REACTION_ICON[rx]}</span>
+                      {rs[rx] > 0 && <span className="reaction-count">{fmtCount(rs[rx])}</span>}
+                    </button>
+                  ))}
+                </div>
+                {total > 0 && (
+                  <span className="reaction-total" aria-hidden="true" title={`${total} total reactions`}>
+                    ⬢ {fmtCount(total)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="modal-nav next"
+              onClick={(e) => { e.stopPropagation(); stepModal(1); }}
+              disabled={modalIndex >= carouselList.length - 1}
+              aria-label="Next meme"
+            >›</button>
+          </div>
+        );
+      })()}
 
       {showHelp && <KeyboardHelp onClose={() => setShowHelp(false)} />}
 
@@ -755,6 +855,7 @@ function Card({ meme, index, focused, lit, dim, liked, reactionCounts, innerRef,
               className={`reaction-btn ${rx === 'heart' && liked ? 'liked' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
+                burstReactionParticle(e.currentTarget, REACTION_ICON[rx]);
                 if (rx === 'heart') onToggleFavorite();
                 else onReact(rx);
               }}
@@ -847,6 +948,94 @@ export function HexScrollTop() {
     >
       <span className="arrow" aria-hidden="true">▲</span>
     </button>
+  );
+}
+
+// Per-meme reaction island for the permalink page. Fetches the shared
+// bulk reactions endpoint (edge-cached, cheap) on mount, picks out this
+// slug, then handles optimistic clicks the same way the gallery does.
+// Mirrors the gallery card's visual layout so the permalink feels like a
+// zoomed-in version of the same card.
+export function PermalinkReactions({ slug }: { slug: string }) {
+  const [counts, setCounts] = useState<ReactionCounts>(EMPTY_REACTIONS);
+  const [liked, setLiked] = useState(false);
+  const [offline, setOffline] = useState(false);
+
+  useEffect(() => {
+    try {
+      const favs = JSON.parse(localStorage.getItem(FAVS_KEY) ?? '[]') as string[];
+      setLiked(favs.includes(slug));
+    } catch { /* ignore */ }
+    fetch(apiUrl('/api/reactions'))
+      .then((r) => (r.ok ? (r.json() as Promise<ReactionsMap>) : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((map) => { setCounts(map[slug] ?? EMPTY_REACTIONS); })
+      .catch(() => setOffline(true));
+  }, [slug]);
+
+  const toggleFav = () => {
+    try {
+      const favs = new Set<string>(JSON.parse(localStorage.getItem(FAVS_KEY) ?? '[]') as string[]);
+      const wasLiked = favs.has(slug);
+      if (wasLiked) favs.delete(slug);
+      else favs.add(slug);
+      localStorage.setItem(FAVS_KEY, JSON.stringify([...favs]));
+      setLiked(!wasLiked);
+      if (!wasLiked) {
+        // First-time favorite also bumps the global heart count.
+        void react('heart');
+      }
+    } catch { /* ignore */ }
+  };
+
+  const react = async (rx: Reaction) => {
+    setCounts((prior) => ({ ...prior, [rx]: (prior[rx] ?? 0) + 1 }));
+    try {
+      const res = await fetch(apiUrl(`/api/reactions/${encodeURIComponent(slug)}/${rx}`), { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = (await res.json()) as { count: number };
+      setCounts((prior) => ({ ...prior, [rx]: body.count }));
+      setOffline(false);
+    } catch {
+      setCounts((prior) => ({ ...prior, [rx]: Math.max(0, (prior[rx] ?? 0) - 1) }));
+      setOffline(true);
+    }
+  };
+
+  const total = counts.heart + counts.laugh + counts.bolt + counts.diamond;
+  return (
+    <>
+      <div className="permalink-overlay-bottom">
+        <div className="reaction-row" role="group" aria-label="Reactions">
+          {REACTIONS.map((rx) => (
+            <button
+              key={rx}
+              type="button"
+              className={`reaction-btn ${rx === 'heart' && liked ? 'liked' : ''}`}
+              onClick={(e) => {
+                burstReactionParticle(e.currentTarget, REACTION_ICON[rx]);
+                if (rx === 'heart') toggleFav();
+                else void react(rx);
+              }}
+              aria-label={`React with ${REACTION_LABEL[rx]}`}
+              title={REACTION_LABEL[rx]}
+            >
+              <span className="reaction-icon" aria-hidden="true">{REACTION_ICON[rx]}</span>
+              {counts[rx] > 0 && <span className="reaction-count">{fmtCount(counts[rx])}</span>}
+            </button>
+          ))}
+        </div>
+        {total > 0 && (
+          <span className="reaction-total" aria-hidden="true" title={`${total} total reactions`}>
+            ⬢ {fmtCount(total)}
+          </span>
+        )}
+      </div>
+      {offline && (
+        <div className="reactions-offline" role="status" aria-live="polite">
+          reactions temporarily offline
+        </div>
+      )}
+    </>
   );
 }
 
