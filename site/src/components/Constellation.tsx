@@ -70,6 +70,22 @@ function runPhysics(nodes: Node[], edges: Edge[], w: number, h: number): void {
   }
 }
 
+// Pointy-top hexagon path matching the site's clip-path:
+// polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%).
+// r is the circumscribed radius (distance to the top/bottom point).
+function hexPath(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+  const hx = r * Math.sqrt(3) / 2;
+  const hy = r / 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y - r);
+  ctx.lineTo(x + hx, y - hy);
+  ctx.lineTo(x + hx, y + hy);
+  ctx.lineTo(x, y + r);
+  ctx.lineTo(x - hx, y + hy);
+  ctx.lineTo(x - hx, y - hy);
+  ctx.closePath();
+}
+
 export default function Constellation({ manifestUrl = '/manifest.json' }: Props) {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [hoverTag, setHoverTag] = useState<string | null>(null);
@@ -145,10 +161,11 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let raf = 0;
     let iters = 0;
-    // Always settle within ~10s of animation, even without reduced-motion —
-    // the layout converges long before that and running forever burns CPU
-    // for no benefit. Hover re-renders in the existing draw pass.
-    const MAX_SETTLE_ITERS = reduce ? 180 : 600;
+    const MAX_SETTLE_ITERS = reduce ? 120 : 240;
+    // Stop as soon as the total kinetic energy per node drops below this
+    // threshold — in practice the layout converges in 2–3s on desktop.
+    const KE_THRESHOLD = 0.08;
+    const MIN_SETTLE_ITERS = reduce ? 30 : 80;
 
     function resize() {
       const rect = wrapper!.getBoundingClientRect();
@@ -177,7 +194,13 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
       if (!settled) {
         runPhysics(nodes, edges, w, h);
         iters++;
-        if (iters >= MAX_SETTLE_ITERS) settled = true;
+        let ke = 0;
+        for (const n of nodes) ke += n.vx * n.vx + n.vy * n.vy;
+        const perNode = ke / Math.max(1, nodes.length);
+        if (iters >= MAX_SETTLE_ITERS || (iters >= MIN_SETTLE_ITERS && perNode < KE_THRESHOLD)) {
+          settled = true;
+          for (const n of nodes) { n.vx = 0; n.vy = 0; }
+        }
       } else if (!needsRedraw) {
         raf = requestAnimationFrame(draw);
         return;
@@ -200,11 +223,10 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
         ctx!.stroke();
       }
 
-      // Nodes
+      // Nodes — pointy-top hexagons matching the site's clip-path identity.
       for (const n of nodes) {
         const lit = currentHover === n.tag;
-        ctx!.beginPath();
-        ctx!.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+        hexPath(ctx!, n.x, n.y, n.radius);
         ctx!.fillStyle = lit ? '#2f62df' : 'rgba(47, 98, 223, 0.65)';
         ctx!.fill();
         ctx!.strokeStyle = lit ? 'white' : 'rgba(255,255,255,0.25)';
