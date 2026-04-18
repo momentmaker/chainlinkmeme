@@ -14,9 +14,12 @@ const THEME_KEY = 'chainlinkmeme:theme';
 const REACTIONS = ['heart', 'laugh', 'bolt', 'diamond'] as const;
 type Reaction = typeof REACTIONS[number];
 const REACTION_ICON: Record<Reaction, string> = {
-  heart: '♥',
+  // ❤️ (heart + VS16) forces emoji presentation on systems that would
+  // otherwise render ♥ as thin monochrome text — matches the full-color
+  // weight of 😂 ⚡ 💎 so the four buttons look like a set.
+  heart: '\u2764\ufe0f',
   laugh: '😂',
-  bolt: '⚡',
+  bolt: '\u26a1\ufe0f',
   diamond: '💎',
 };
 const REACTION_LABEL: Record<Reaction, string> = {
@@ -726,6 +729,15 @@ function Card({ meme, index, focused, lit, dim, liked, reactionCounts, innerRef,
           style={{ viewTransitionName: `meme-${meme.slug}` }}
         />
       </a>
+      <button
+        type="button"
+        className="card-link"
+        onClick={(e) => { e.stopPropagation(); onCopyLink(); }}
+        aria-label="Copy permalink"
+        title="Copy permalink"
+      >
+        <span className="card-link-icon" aria-hidden="true">🔗</span>
+      </button>
       <div className="card-overlay">
         <div className="reaction-row" role="group" aria-label="Reactions">
           {REACTIONS.map((rx) => (
@@ -746,9 +758,6 @@ function Card({ meme, index, focused, lit, dim, liked, reactionCounts, innerRef,
             </button>
           ))}
         </div>
-        <button type="button" className="tag-btn" onClick={(e) => { e.stopPropagation(); onCopyLink(); }} aria-label="Copy permalink">
-          link
-        </button>
         {totalReactions > 0 && <span className="reaction-total" aria-hidden="true">⚡ {fmtCount(totalReactions)}</span>}
       </div>
     </div>

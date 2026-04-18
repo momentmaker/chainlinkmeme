@@ -305,7 +305,52 @@ a:hover { text-decoration: underline; }
 .card:hover .card-overlay,
 .card.focused .card-overlay { opacity: 1; }
 
-.like-btn, .tag-btn, .reaction-btn {
+/* Hexagonal permalink-copy button pinned to the card's top-right. Only
+   appears when the card is hovered/focused so the image reads clean at
+   rest. Matches the hex-btn header buttons so the brand language is
+   consistent across the site. */
+.card-link {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 42px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+  z-index: 3;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.card-link::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: background 0.15s ease;
+}
+.card-link-icon {
+  position: relative;
+  z-index: 1;
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+.card:hover .card-link,
+.card[data-focused] .card-link { opacity: 1; }
+.card-link:hover { transform: scale(1.1); }
+.card-link:hover::before { background: rgba(47, 98, 223, 0.85); }
+.card-link:focus-visible { opacity: 1; outline: none; filter: drop-shadow(0 0 3px rgba(47, 98, 223, 0.7)); }
+
+.like-btn, .tag-btn {
   background: rgba(255,255,255,0.95);
   border: none;
   border-radius: 999px;
@@ -319,27 +364,47 @@ a:hover { text-decoration: underline; }
   align-items: center;
   font-family: inherit;
 }
-.like-btn:hover, .tag-btn:hover, .reaction-btn:hover { background: white; transform: scale(1.08); }
+.like-btn:hover, .tag-btn:hover { background: white; transform: scale(1.08); }
 .like-btn.liked { color: var(--accent-red); }
 .like-btn.liked .heart { color: var(--accent-red); }
 
-/* Multi-reaction row — heart, laugh, bolt, diamond. Sits on the card overlay
-   alongside the permalink pill. Each button is small, tap-sized, animates
-   on tap to reinforce the satisfaction of voting. */
+/* Multi-reaction row — heart, laugh, bolt, diamond. Translucent dark fill
+   instead of the white pill the other card buttons use, so the emoji pops
+   against any meme behind it (white-on-white reactions were invisible on
+   light memes, and full-color emoji always read better on dark). */
 .reaction-row {
   display: inline-flex;
   gap: 4px;
   align-items: center;
 }
 .reaction-btn {
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  border-radius: 999px;
   padding: 4px 8px;
+  color: white;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
   transition: transform 0.12s ease, background 0.15s ease;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
+.reaction-btn:hover { background: rgba(0, 0, 0, 0.7); transform: scale(1.1); }
 .reaction-btn:active { transform: scale(0.92); }
-.reaction-btn.liked { color: var(--accent-red); }
-.reaction-btn.liked .reaction-icon { color: var(--accent-red); }
-.reaction-icon { font-size: 12px; line-height: 1; }
-.reaction-count { font-variant-numeric: tabular-nums; }
+.reaction-btn.liked { background: rgba(47, 98, 223, 0.85); }
+.reaction-icon {
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+.reaction-count { font-variant-numeric: tabular-nums; font-size: 11px; opacity: 0.9; }
 .reaction-total {
   font-size: 10px;
   letter-spacing: 0.08em;
@@ -473,6 +538,10 @@ a:hover { text-decoration: underline; }
   padding: 0;
 }
 .search-clear:hover { background: var(--brand-blue); color: white; }
+/* Chromium/WebKit paint a second clear "x" inside type="search" inputs by
+   default — hide it so only our custom .search-clear button is visible. */
+.search-wrap input[type="search"]::-webkit-search-cancel-button,
+.search-wrap input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
 
 .suggestions {
   position: absolute;
