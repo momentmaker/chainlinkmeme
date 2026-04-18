@@ -1,7 +1,13 @@
+import { handleDiscordInteraction } from './discord';
+
 interface Env {
   DB: D1Database;
   LIKES_CACHE_TTL: string;
   LIKES_RATE_PER_MIN: string;
+  DISCORD_APP_ID: string;
+  DISCORD_PUBLIC_KEY: string;
+  DISCORD_BOT_TOKEN: string;
+  SITE_ORIGIN: string;
 }
 
 const SLUG_RE = /^[a-z0-9_][a-z0-9_-]*$/;
@@ -59,6 +65,12 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     const ttl = Number(env.LIKES_CACHE_TTL || '60');
+
+    // Discord interactions endpoint — signature-verified inside the handler.
+    // Never cached, never cross-origin CORSed (Discord calls server-to-server).
+    if (path === '/discord/interactions' && request.method === 'POST') {
+      return handleDiscordInteraction(request, env);
+    }
 
     // New bulk endpoint: `{ slug: { heart, laugh, bolt, diamond } }`
     if (path === '/api/reactions' && request.method === 'GET') {

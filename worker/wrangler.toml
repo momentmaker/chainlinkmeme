@@ -26,3 +26,11 @@ enabled = true
 LIKES_CACHE_TTL = "60"
 # Per-IP rate limit: max increments per minute. Turnstile can relax this.
 LIKES_RATE_PER_MIN = "20"
+
+# Discord bot — slash command at /discord/interactions.
+# DISCORD_BOT_TOKEN is stored as a wrangler secret (not here).
+DISCORD_APP_ID = "1495133781697495102"
+DISCORD_PUBLIC_KEY = "abacfad5f6a456d827aead6c022651b3766da8df288140e2849ac05026cf97ca"
+# Where the Worker pulls the manifest to search. Overriding locally lets dev
+# pretend it's the prod site.
+SITE_ORIGIN = "https://chainlinkme.me"

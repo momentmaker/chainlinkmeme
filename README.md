@@ -44,6 +44,18 @@ pnpm --filter site build      # pre-render every meme page
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full walkthrough. Short version: drop `yourfile.jpg` + `yourfile.toml` into `memes/`, open a PR.
 
+## Discord bot
+
+Summon any meme in your Discord server with `/clmeme <tag>`:
+
+- `/clmeme sergey` → a random sergey meme
+- `/clmeme moon wagmi` → a meme matching either tag
+- `/clmeme` (no query) → a random meme from the archive
+
+**[Install to your server →](https://discord.com/oauth2/authorize?client_id=1495133781697495102&integration_type=0&scope=applications.commands)**
+
+Server admin only needs `applications.commands` scope — no bot user, no gateway, no ongoing permissions. Every invocation hits a Cloudflare Worker that signs the response with Discord's Ed25519 key and embeds the meme inline.
+
 ## License
 
 - Site code: MIT (see `LICENSE`)
