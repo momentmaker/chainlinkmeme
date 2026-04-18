@@ -115,7 +115,16 @@ export default function Shuffle({ manifestUrl = '/manifest.json' }: Props) {
   useEffect(() => {
     if (!open) return;
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
+    // ClientRouter view transitions don't unmount the Shuffle island (it
+    // lives in the shared layout), so the cleanup below wouldn't fire if
+    // the user clicked the in-overlay permalink link. Close proactively on
+    // navigation so the new page doesn't inherit a locked scroll.
+    const onNavigate = (): void => setOpen(false);
+    document.addEventListener('astro:before-preparation', onNavigate);
+    return () => {
+      document.body.style.overflow = '';
+      document.removeEventListener('astro:before-preparation', onNavigate);
+    };
   }, [open]);
 
   const current = cursor >= 0 ? history[cursor] : null;

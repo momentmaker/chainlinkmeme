@@ -23,6 +23,12 @@ const PADDING = 40;
 const MIN_SCALE = 0.15;
 const MAX_SCALE = 8;
 const CONCURRENT_LOADS = 8;
+// Don't request image data for tiles rendered below this CSS-pixel diameter.
+// At fit-to-viewport on a full archive (~1,800 tiles) each hex is ~5px wide —
+// loading 1,800 images to downscale to 5×5 would flood the network and pin
+// mobile devices. Below threshold we just draw the hex outline. Images start
+// arriving only as the user zooms in.
+const IMAGE_LOAD_MIN_PX = 32;
 const HASH_RE = /^[0-9a-f]{10,}$/i;
 
 function displayTitle(m: MemeEntry): string {
@@ -108,8 +114,9 @@ export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
     if (!ctx) return;
 
     let raf = 0;
+    let destroyed = false;
     let needsRedraw = true;
-    const markDirty = () => { needsRedraw = true; };
+    const markDirty = () => { if (!destroyed) needsRedraw = true; };
     markDirtyRef.current = markDirty;
 
     let currentDpr = window.devicePixelRatio || 1;
@@ -171,11 +178,13 @@ export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
       img.decoding = 'async';
       img.crossOrigin = 'anonymous';
       img.onload = () => {
+        if (destroyed) return;
         cache.set(meme.slug, img);
         loadingRef.current.delete(meme.slug);
         markDirty();
       };
       img.onerror = () => {
+        if (destroyed) return;
         failedRef.current.add(meme.slug);
         loadingRef.current.delete(meme.slug);
         markDirty();
@@ -199,12 +208,17 @@ export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
       );
 
       const tiles = visibleTiles();
+      const tilePx = TILE_R * 2 * v.scale;
+      const shouldLoad = tilePx >= IMAGE_LOAD_MIN_PX;
       for (const t of tiles) {
         hexPath(ctx!, t.x, t.y, TILE_R);
         ctx!.fillStyle = 'rgba(47, 98, 223, 0.10)';
         ctx!.fill();
 
-        const img = requestImage(t.meme);
+        // Only touch the image cache if tiles are big enough to benefit. At
+        // zoomed-out fit-to-viewport every tile is ~5px wide — loading images
+        // for them would chain 1,800 requests and block other network work.
+        const img = shouldLoad ? requestImage(t.meme) : imagesRef.current.get(t.meme.slug) ?? null;
         if (img && img.complete && img.naturalWidth > 0) {
           ctx!.save();
           hexPath(ctx!, t.x, t.y, TILE_R - 0.5);
@@ -313,6 +327,7 @@ export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
     canvas.style.cursor = 'grab';
 
     return () => {
+      destroyed = true;
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
       window.removeEventListener('blur', onBlur);
@@ -350,13 +365,22 @@ export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
     if (!layout) return null;
     const p = toWorld(clientX, clientY);
     if (!p) return null;
+    // Pointy-top hex point-in-polygon test: inside when the horizontal
+    // half-width |dx| ≤ apothem AND the shape is bounded by the two sloped
+    // edges. apothem = R·√3/2 (flat-edge distance from center). The circle
+    // test d² < R² would over-cover by ~9% at the corners and leave dead
+    // zones at flat-edge midpoints where adjacent tiles compete.
+    const apothem = (TILE_R * Math.sqrt(3)) / 2;
     let best: Tile | null = null;
     let bestDist = Infinity;
     for (const t of layout.tiles) {
-      const dx = t.x - p.x;
-      const dy = t.y - p.y;
+      const dx = Math.abs(t.x - p.x);
+      const dy = Math.abs(t.y - p.y);
+      if (dx > apothem || dy > TILE_R) continue;
+      // Edge test: apothem * TILE_R >= apothem * dx + TILE_R * dy / 2
+      if (apothem * TILE_R < apothem * dx + (TILE_R * dy) / 2) continue;
       const d = dx * dx + dy * dy;
-      if (d < bestDist && d < TILE_R * TILE_R) { bestDist = d; best = t; }
+      if (d < bestDist) { bestDist = d; best = t; }
     }
     return best;
   };

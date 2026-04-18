@@ -1199,7 +1199,16 @@ a:hover { text-decoration: underline; }
     var(--card-bg);
   overflow: hidden;
 }
-.grid-hex-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.grid-hex-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  /* Stop mobile browsers from handling the pan gesture themselves — we
+     control panning via PointerEvents and the default browser scroll
+     behavior would fight the drag. */
+  touch-action: none;
+}
 .grid-hex-canvas:active { cursor: grabbing; }
 
 /* Shuffle overlay — fullscreen one-meme-at-a-time mode.

@@ -28,16 +28,29 @@ interface ApiManifest {
 
 let cachedApiManifest: ApiManifest | null = null;
 let cachedApiManifestAt = 0;
+// Dedupe concurrent cold-start fetches: when N requests arrive before the
+// first manifest fetch resolves, they all share the in-flight promise instead
+// of each firing their own upstream fetch.
+let inflightApiManifest: Promise<ApiManifest> | null = null;
 const API_MANIFEST_TTL_MS = 5 * 60 * 1000;
 
 async function loadApiManifest(origin: string): Promise<ApiManifest> {
   const now = Date.now();
   if (cachedApiManifest && now - cachedApiManifestAt < API_MANIFEST_TTL_MS) return cachedApiManifest;
-  const res = await fetch(`${origin}/manifest.json`, { cf: { cacheTtl: 300 } });
-  if (!res.ok) throw new Error(`manifest fetch failed: HTTP ${res.status}`);
-  cachedApiManifest = (await res.json()) as ApiManifest;
-  cachedApiManifestAt = now;
-  return cachedApiManifest;
+  if (inflightApiManifest) return inflightApiManifest;
+  inflightApiManifest = (async () => {
+    try {
+      const res = await fetch(`${origin}/manifest.json`, { cf: { cacheTtl: 300 } });
+      if (!res.ok) throw new Error(`manifest fetch failed: HTTP ${res.status}`);
+      const m = (await res.json()) as ApiManifest;
+      cachedApiManifest = m;
+      cachedApiManifestAt = Date.now();
+      return m;
+    } finally {
+      inflightApiManifest = null;
+    }
+  })();
+  return inflightApiManifest;
 }
 
 const REPO_OWNER = 'momentmaker';
@@ -159,59 +172,74 @@ export default {
     // Public API — lightweight endpoints on top of the static manifest.
     // /manifest.json remains the full canonical source for anyone who
     // wants the raw data; these just shape common queries server-side.
+    // Each endpoint catches upstream failures explicitly — an unhandled
+    // throw would escape to Cloudflare's default 500, which lacks the CORS
+    // headers needed for browser-side fetch callers.
     if (path === '/api/random' && request.method === 'GET') {
-      const m = await loadApiManifest(env.SITE_ORIGIN);
-      const tagFilter = url.searchParams.get('tag')?.toLowerCase() ?? null;
-      const pool = tagFilter
-        ? m.memes.filter((x) => x.tags.includes(tagFilter))
-        : m.memes;
-      if (pool.length === 0) return json({ error: 'no memes match' }, { status: 404 });
-      const picked = pool[Math.floor(Math.random() * pool.length)]!;
-      const ref = m.repo_ref || 'main';
-      if (url.searchParams.get('redirect') === '1') {
-        return new Response(null, {
-          status: 302,
-          headers: {
-            Location: `${env.SITE_ORIGIN}/m/${picked.slug}/`,
-            'Cache-Control': 'no-store',
-            ...corsHeaders,
-          },
+      try {
+        const m = await loadApiManifest(env.SITE_ORIGIN);
+        const tagFilter = url.searchParams.get('tag')?.toLowerCase() ?? null;
+        const pool = tagFilter
+          ? m.memes.filter((x) => x.tags.includes(tagFilter))
+          : m.memes;
+        if (pool.length === 0) return json({ error: 'no memes match' }, { status: 404 });
+        const picked = pool[Math.floor(Math.random() * pool.length)]!;
+        const ref = m.repo_ref || 'main';
+        if (url.searchParams.get('redirect') === '1') {
+          return new Response(null, {
+            status: 302,
+            headers: {
+              Location: `${env.SITE_ORIGIN}/m/${picked.slug}/`,
+              'Cache-Control': 'no-store',
+              ...corsHeaders,
+            },
+          });
+        }
+        return json(shapeMeme(picked, env.SITE_ORIGIN, ref), {
+          headers: { 'Cache-Control': 'no-store' },
         });
+      } catch {
+        return json({ error: 'manifest unavailable' }, { status: 503 });
       }
-      return json(shapeMeme(picked, env.SITE_ORIGIN, ref), {
-        headers: { 'Cache-Control': 'no-store' },
-      });
     }
 
     if (path === '/api/search' && request.method === 'GET') {
       const q = url.searchParams.get('q')?.trim() ?? '';
       if (!q) return json({ error: 'missing query parameter q' }, { status: 400 });
       const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit') || '24')));
-      const m = await loadApiManifest(env.SITE_ORIGIN);
-      const rawTokens = q.split(/[\s,]+/).map((t) => t.toLowerCase()).filter(Boolean);
-      const expanded = expandQuery(rawTokens, m.synonyms, m.related);
-      const ref = m.repo_ref || 'main';
-      const results = m.memes
-        .map((x) => ({ m: x, s: scoreMeme(x, expanded) }))
-        .filter(({ s }) => s > 0)
-        .sort((a, b) => b.s - a.s)
-        .slice(0, limit)
-        .map(({ m: x }) => shapeMeme(x, env.SITE_ORIGIN, ref));
-      return json({ query: q, count: results.length, results }, {
-        headers: { 'Cache-Control': 'public, max-age=60' },
-      });
+      try {
+        const m = await loadApiManifest(env.SITE_ORIGIN);
+        const rawTokens = q.split(/[\s,]+/).map((t) => t.toLowerCase()).filter(Boolean);
+        const expanded = expandQuery(rawTokens, m.synonyms, m.related);
+        const ref = m.repo_ref || 'main';
+        const results = m.memes
+          .map((x) => ({ m: x, s: scoreMeme(x, expanded) }))
+          .filter(({ s }) => s > 0)
+          .sort((a, b) => b.s - a.s)
+          .slice(0, limit)
+          .map(({ m: x }) => shapeMeme(x, env.SITE_ORIGIN, ref));
+        return json({ query: q, count: results.length, results }, {
+          headers: { 'Cache-Control': 'public, max-age=60' },
+        });
+      } catch {
+        return json({ error: 'manifest unavailable' }, { status: 503 });
+      }
     }
 
     if (path === '/api/tags' && request.method === 'GET') {
-      const m = await loadApiManifest(env.SITE_ORIGIN);
-      const counts = new Map<string, number>();
-      for (const x of m.memes) for (const t of x.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
-      const tags = [...counts.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([tag, count]) => ({ tag, count }));
-      return json({ count: tags.length, tags }, {
-        headers: { 'Cache-Control': 'public, max-age=300' },
-      });
+      try {
+        const m = await loadApiManifest(env.SITE_ORIGIN);
+        const counts = new Map<string, number>();
+        for (const x of m.memes) for (const t of x.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+        const tags = [...counts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([tag, count]) => ({ tag, count }));
+        return json({ count: tags.length, tags }, {
+          headers: { 'Cache-Control': 'public, max-age=300' },
+        });
+      } catch {
+        return json({ error: 'manifest unavailable' }, { status: 503 });
+      }
     }
 
     // New bulk endpoint: `{ slug: { heart, laugh, bolt, diamond } }`
