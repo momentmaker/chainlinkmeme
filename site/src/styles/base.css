@@ -102,21 +102,40 @@ a:hover { text-decoration: underline; }
    their neighbours instead of forcing every row to the tallest card's height.
    Pinterest-style packing is the right answer for a gallery of memes, which
    arrive in every shape imaginable. */
-.gallery {
-  column-count: 3;
-  column-gap: 16px;
+/* Main gallery uses JS-distributed masonry: explicit flex columns in the
+   DOM keep the order append-only, so scrolling back after loading more
+   memes shows the same cards in the same spots. CSS column-count did the
+   shaping for free but rebalanced everything on every grow — exactly the
+   scroll-up weirdness users were seeing. Column count + gap here must
+   mirror the matchMedia breakpoints in Gallery.tsx. Scoped with :has() so
+   the related-section on permalinks (which has flat .card children, no
+   .gallery-column wrappers) keeps its own simple grid. */
+.gallery:has(.gallery-column) {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
 }
-@media (max-width: 1096px) { .gallery { column-count: 2; } }
-@media (max-width: 640px) { .gallery { column-count: 1; column-gap: 12px; } }
+.gallery-column {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+@media (max-width: 640px) {
+  .gallery:has(.gallery-column) { gap: 12px; }
+  .gallery-column { gap: 12px; }
+}
 
-.gallery .card {
-  break-inside: avoid;
-  page-break-inside: avoid;
-  margin-bottom: 16px;
-  display: block;
-  width: 100%;
+/* Fallback layout for gallery containers that hold flat .card children
+   (e.g. the related-memes strip on permalink pages). */
+.gallery:not(:has(.gallery-column)) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
 }
-@media (max-width: 640px) { .gallery .card { margin-bottom: 12px; } }
+
+.gallery .card { display: block; width: 100%; }
 
 .card {
   position: relative;
@@ -189,6 +208,23 @@ a:hover { text-decoration: underline; }
   0%, 100% { opacity: 0.35; transform: translateY(0); }
   50%      { opacity: 0.85; transform: translateY(-2px); }
 }
+
+.load-more {
+  text-align: center;
+  padding: 40px 0 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.load-more-count {
+  color: var(--muted);
+  font-family: Menlo, Monaco, monospace;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  margin: 0;
+}
+.load-more-count strong { color: var(--brand-blue); font-weight: 700; }
 
 /* Most-liked strip — shows up under the hero once the community has voted. */
 .popular-strip { margin: 0 0 20px; }
@@ -498,6 +534,46 @@ a:hover { text-decoration: underline; }
 }
 .icon-btn:hover { border-color: var(--brand-blue); color: var(--brand-blue); transform: translateY(-1px); }
 
+/* Hexagon icon button — matches the hex-scroll widget's visual language.
+   Uses clip-path for the shape plus a pseudo inner fill so the brand-blue
+   outer slice reads as a border. Content sits in a .hex-btn-label span on
+   top of both layers. */
+.hex-btn {
+  position: relative;
+  width: 48px;
+  height: 54px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-family: inherit;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.hex-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--brand-blue);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+.hex-btn::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background: var(--card-bg);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+.hex-btn-label { position: relative; z-index: 1; line-height: 1; }
+.hex-btn:hover { color: var(--brand-blue); transform: translateY(-1px); }
+.hex-btn:hover::after { background: rgba(47, 98, 223, 0.08); }
+[data-theme="dark"] .hex-btn:hover::after { background: rgba(47, 98, 223, 0.2); }
+
 /* Modal */
 .modal-backdrop {
   position: fixed;
@@ -524,6 +600,34 @@ a:hover { text-decoration: underline; }
   max-height: 78vh;
   display: block;
   object-fit: contain;
+}
+.modal-img-wrap {
+  position: relative;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-img-wrap.loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(47, 98, 223, 0.06),
+    rgba(47, 98, 223, 0.06) 12px,
+    rgba(47, 98, 223, 0.12) 12px,
+    rgba(47, 98, 223, 0.12) 24px
+  );
+  pointer-events: none;
+  animation: modal-shimmer 1.2s linear infinite;
+}
+@keyframes modal-shimmer {
+  from { background-position: 0 0; }
+  to   { background-position: 34px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-img-wrap.loading::after { animation: none; }
 }
 .modal-toolbar {
   padding: 10px 14px;

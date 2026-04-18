@@ -42,6 +42,11 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   const [animatedOnly, setAnimatedOnly] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [page, setPage] = useState(1);
+  // Infinite scroll cap — after MAX_AUTO_PAGES the sentinel stops firing and a
+  // "show all" button unlocks the rest. Without this, users never see the
+  // footer on 1,798 items because the sentinel keeps them scrolling forever.
+  const MAX_AUTO_PAGES = 7;
+  const [showAll, setShowAll] = useState(false);
   const [focused, setFocused] = useState(-1);
   const [modalSlug, setModalSlug] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -75,19 +80,30 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   const spotlightCap = pageSize * 3;
   const visible = useMemo(() => {
     if (!manifest) return [] as MemeEntry[];
-    if (!queryActive) return filtered.slice(0, page * pageSize);
+    if (!queryActive) {
+      const take = showAll ? filtered.length : Math.min(page, MAX_AUTO_PAGES) * pageSize;
+      return filtered.slice(0, take);
+    }
     const matchSet = new Set(filtered.map((m) => m.slug));
     const nonMatches = manifest.memes.filter((m) => !matchSet.has(m.slug));
     return [
       ...filtered.slice(0, spotlightCap),
       ...nonMatches.slice(0, Math.max(0, spotlightCap - filtered.length)),
     ];
-  }, [manifest, filtered, queryActive, page, pageSize, spotlightCap]);
+  }, [manifest, filtered, queryActive, page, pageSize, spotlightCap, showAll]);
   const matchLookup = useMemo(() => new Set(filtered.map((m) => m.slug)), [filtered]);
+  // slug → position in `visible` — lets the JS-masonry column render figure
+  // out which card should hold the keyboard focus without an O(N) indexOf.
+  const visibleIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    visible.forEach((m, i) => map.set(m.slug, i));
+    return map;
+  }, [visible]);
 
   useEffect(() => {
     setPage(1);
     setFocused(-1);
+    setShowAll(false);
   }, [query, animatedOnly, favoritesOnly]);
 
   useEffect(() => {
@@ -96,6 +112,40 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
       .then(setLikes)
       .catch(() => {});
   }, []);
+
+  // Responsive column count, tracked via matchMedia so the JS masonry can
+  // redistribute on resize. Matches the old CSS breakpoints exactly.
+  const [columnCount, setColumnCount] = useState(3);
+  useEffect(() => {
+    const sm = window.matchMedia('(max-width: 640px)');
+    const md = window.matchMedia('(max-width: 1096px)');
+    const update = () => setColumnCount(sm.matches ? 1 : md.matches ? 2 : 3);
+    update();
+    sm.addEventListener('change', update);
+    md.addEventListener('change', update);
+    return () => {
+      sm.removeEventListener('change', update);
+      md.removeEventListener('change', update);
+    };
+  }, []);
+
+  // JS masonry: distribute into N columns by appending each card to whichever
+  // column is currently shortest (height estimated via aspect ratio). Critical
+  // property: this is append-only — adding cards at the end never reshuffles
+  // earlier cards. CSS column-count would rebalance on every grow, which is
+  // exactly what made scrolling back up feel "random" before.
+  const columns = useMemo(() => {
+    const cols: MemeEntry[][] = Array.from({ length: columnCount }, () => []);
+    const heights = new Array<number>(columnCount).fill(0);
+    for (const m of visible) {
+      const aspect = m.width > 0 && m.height > 0 ? m.height / m.width : 1;
+      let shortest = 0;
+      for (let i = 1; i < columnCount; i++) if (heights[i] < heights[shortest]) shortest = i;
+      cols[shortest].push(m);
+      heights[shortest] += aspect;
+    }
+    return cols;
+  }, [visible, columnCount]);
 
   // Tag usage counts — computed once per manifest load and used to rank the
   // autocomplete suggestions from most common to least.
@@ -214,6 +264,31 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     setModalSlug(carouselList[next].slug);
   }, [modalIndex, carouselList]);
 
+  // Preload the neighbours so arrow-key navigation swaps instantly instead of
+  // showing the previous image until the new one decodes. `new Image()` kicks
+  // off a fetch without mounting anything; decoded bytes stay in the browser
+  // cache and the real <img> below picks them up on swap.
+  useEffect(() => {
+    if (modalIndex < 0) return;
+    for (const dir of [-1, 1] as const) {
+      const neighbour = carouselList[modalIndex + dir];
+      if (neighbour) {
+        const img = new Image();
+        img.src = memeUrl(neighbour.filename);
+      }
+    }
+  }, [modalIndex, carouselList]);
+
+  // While the new image is decoding, keep the slug we last successfully showed
+  // so the <img> element isn't blank — but only for the brief load window.
+  // Once `onLoad` fires we clear it. Combined with the preload above, this
+  // makes arrow-key navigation feel instant.
+  const [modalLoading, setModalLoading] = useState(false);
+  useEffect(() => {
+    if (!modalSlug) { setModalLoading(false); return; }
+    setModalLoading(true);
+  }, [modalSlug]);
+
   const onKey = useCallback(
     (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement && e.key !== 'Escape') return;
@@ -273,22 +348,28 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   // Infinite scroll: observe a sentinel near the footer and bump the page as
   // it enters the viewport. Only active when no query is set — spotlight mode
   // already shows a large set, and pagination would feel wrong there.
+  // The sentinel stops at MAX_AUTO_PAGES so the footer becomes reachable;
+  // users can click "show all" to keep going.
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (queryActive) return;
+    if (queryActive || showAll) return;
     const el = sentinelRef.current;
     if (!el || !manifest) return;
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {
-          setPage((p) => (p * pageSize < filtered.length ? p + 1 : p));
+          setPage((p) => {
+            if (p >= MAX_AUTO_PAGES) return p;
+            if (p * pageSize >= filtered.length) return p;
+            return p + 1;
+          });
         }
       },
       { rootMargin: '600px 0px' },
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [queryActive, manifest, filtered.length, pageSize]);
+  }, [queryActive, manifest, filtered.length, pageSize, showAll]);
 
 
   return (
@@ -389,11 +470,13 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
         </button>
         <button
           type="button"
-          className="icon-btn"
+          className="hex-btn"
           onClick={() => setShowHelp(true)}
           aria-label="Keyboard shortcuts"
           title="Keyboard shortcuts"
-        >?</button>
+        >
+          <span className="hex-btn-label">?</span>
+        </button>
       </div>
 
       {queryActive && manifest && (
@@ -411,32 +494,54 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
         </p>
       ) : (
         <div className="gallery" role="list">
-          {visible.map((m, i) => (
-            <Card
-              key={m.slug}
-              meme={m}
-              index={i}
-              focused={i === focused}
-              lit={queryActive && matchLookup.has(m.slug)}
-              dim={queryActive && !matchLookup.has(m.slug)}
-              liked={favorites.has(m.slug)}
-              likeCount={likes[m.slug] ?? 0}
-              innerRef={i === focused ? focusedCardRef : null}
-              onOpenModal={() => setModalSlug(m.slug)}
-              onToggleFavorite={() => {
-                toggleFavorite(m.slug);
-                if (!favorites.has(m.slug)) incrementLike(m.slug);
-              }}
-              onCopyLink={() => copyPermalink(m.slug)}
-            />
+          {columns.map((col, ci) => (
+            <div key={ci} className="gallery-column">
+              {col.map((m) => {
+                const i = visibleIndex.get(m.slug) ?? -1;
+                return (
+                  <Card
+                    key={m.slug}
+                    meme={m}
+                    index={i}
+                    focused={i === focused}
+                    lit={queryActive && matchLookup.has(m.slug)}
+                    dim={queryActive && !matchLookup.has(m.slug)}
+                    liked={favorites.has(m.slug)}
+                    likeCount={likes[m.slug] ?? 0}
+                    innerRef={i === focused ? focusedCardRef : null}
+                    onOpenModal={() => setModalSlug(m.slug)}
+                    onToggleFavorite={() => {
+                      toggleFavorite(m.slug);
+                      if (!favorites.has(m.slug)) incrementLike(m.slug);
+                    }}
+                    onCopyLink={() => copyPermalink(m.slug)}
+                  />
+                );
+              })}
+            </div>
           ))}
         </div>
       )}
 
       {!queryActive && visible.length < filtered.length && (
-        <div ref={sentinelRef} className="load-sentinel" aria-hidden="true">
-          <span>⬢ loading more ⬢</span>
-        </div>
+        page < MAX_AUTO_PAGES && !showAll ? (
+          <div ref={sentinelRef} className="load-sentinel" aria-hidden="true">
+            <span>⬢ loading more ⬢</span>
+          </div>
+        ) : !showAll ? (
+          <div className="load-more">
+            <p className="load-more-count">
+              showing <strong>{visible.length}</strong> of <strong>{filtered.length}</strong> memes
+            </p>
+            <button
+              type="button"
+              className="filter-pill"
+              onClick={() => setShowAll(true)}
+            >
+              <span className="hex" aria-hidden="true">⬢</span> show all {filtered.length}
+            </button>
+          </div>
+        ) : null
       )}
 
       {modalMeme && (
@@ -456,7 +561,16 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
           >‹</button>
 
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <img src={memeUrl(modalMeme.filename)} alt={modalMeme.title || modalMeme.slug} />
+            <div className={`modal-img-wrap ${modalLoading ? 'loading' : ''}`}>
+              <img
+                key={modalMeme.slug}
+                src={memeUrl(modalMeme.filename)}
+                alt={modalMeme.title || modalMeme.slug}
+                onLoad={() => setModalLoading(false)}
+                decoding="async"
+                fetchPriority="high"
+              />
+            </div>
             <div className="modal-toolbar">
               <div className="modal-position">
                 <strong>{modalIndex + 1}</strong> <span style={{ opacity: 0.6 }}>/ {carouselList.length}</span>
@@ -595,11 +709,11 @@ export function ThemeToggle() {
   return (
     <button
       type="button"
-      className="filter-pill"
+      className="hex-btn"
       onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
       aria-label="Toggle theme"
     >
-      {mounted ? (theme === 'dark' ? '☀︎' : '☾') : '◐'}
+      <span className="hex-btn-label">{mounted ? (theme === 'dark' ? '☀︎' : '☾') : '◐'}</span>
     </button>
   );
 }

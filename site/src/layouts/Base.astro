@@ -44,15 +44,23 @@ const fullOg = ogImage ?? null;
     {fullOg && <meta name="twitter:image" content={fullOg} />}
 
     <script is:inline>
-      // Apply stored theme before first paint to avoid FOUC
+      // Apply stored theme before first paint to avoid FOUC, and re-apply
+      // after every ClientRouter swap — Astro preserves <html> across
+      // transitions but replaces its attributes, so data-theme would get
+      // blown away on every navigation without this.
       (function () {
-        try {
-          const t = localStorage.getItem('chainlinkmeme:theme');
-          if (t === 'dark') document.documentElement.dataset.theme = 'dark';
-          else if (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            document.documentElement.dataset.theme = 'dark';
-          }
-        } catch (e) { /* ignore */ }
+        function apply() {
+          try {
+            const t = localStorage.getItem('chainlinkmeme:theme');
+            if (t === 'dark') document.documentElement.dataset.theme = 'dark';
+            else if (t === 'light') document.documentElement.dataset.theme = 'light';
+            else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+              document.documentElement.dataset.theme = 'dark';
+            }
+          } catch (e) { /* ignore */ }
+        }
+        apply();
+        document.addEventListener('astro:after-swap', apply);
       })();
     </script>
 
