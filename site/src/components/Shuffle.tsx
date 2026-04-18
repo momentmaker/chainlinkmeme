@@ -129,11 +129,21 @@ export default function Shuffle({ manifestUrl = '/manifest.json' }: Props) {
 
   const current = cursor >= 0 ? history[cursor] : null;
   const nextMeme = history[cursor + 1];
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  // On open, pull focus into the overlay so AT announces it and keyboard
+  // users have a real exit (Tab/Enter on the close button). Without this
+  // focus stays on whatever triggered the shortcut and screen readers
+  // read behind the overlay.
+  useEffect(() => {
+    if (open) closeButtonRef.current?.focus();
+  }, [open]);
 
   if (!open) return null;
   return (
-    <div className="shuffle-overlay" role="dialog" aria-label="Shuffle mode">
+    <div className="shuffle-overlay" role="dialog" aria-modal="true" aria-label="Shuffle mode">
       <button
+        ref={closeButtonRef}
         type="button"
         className="shuffle-close"
         onClick={() => setOpen(false)}
