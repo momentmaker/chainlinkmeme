@@ -16,6 +16,9 @@ concurrency:
   group: tweet-daily
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   tweet:
     runs-on: ubuntu-latest

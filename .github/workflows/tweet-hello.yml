@@ -12,6 +12,13 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: tweet-hello
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
 jobs:
   hello:
     runs-on: ubuntu-latest
