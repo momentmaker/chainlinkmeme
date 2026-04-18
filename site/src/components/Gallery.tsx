@@ -97,6 +97,52 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
       .catch(() => {});
   }, []);
 
+  // Tag usage counts — computed once per manifest load and used to rank the
+  // autocomplete suggestions from most common to least.
+  const tagCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (!manifest) return counts;
+    for (const m of manifest.memes) {
+      for (const t of m.tags) counts[t] = (counts[t] ?? 0) + 1;
+    }
+    return counts;
+  }, [manifest]);
+
+  // Autocomplete suggestions based on the last whitespace-separated token in
+  // the query — lets users keep typing multi-tag queries and still get hints
+  // on the token they're building.
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestions = useMemo(() => {
+    if (!manifest || !showSuggestions) return [] as Array<[string, number]>;
+    const tokens = query.split(/\s+/);
+    const active = tokens[tokens.length - 1]?.toLowerCase() ?? '';
+    if (!active) return [];
+    const all = Object.entries(tagCounts);
+    return all
+      .filter(([t]) => t.startsWith(active) && t !== active)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
+  }, [manifest, tagCounts, query, showSuggestions]);
+
+  const applySuggestion = useCallback((tag: string) => {
+    const tokens = query.split(/\s+/);
+    tokens[tokens.length - 1] = tag;
+    setQuery(tokens.join(' '));
+    setShowSuggestions(false);
+    searchRef.current?.focus();
+  }, [query]);
+
+  // Top 8 most-liked memes, hidden until the archive has real community votes.
+  const popular = useMemo(() => {
+    if (!manifest) return [] as MemeEntry[];
+    return manifest.memes
+      .map((m) => ({ m, c: likes[m.slug] ?? 0 }))
+      .filter(({ c }) => c > 0)
+      .sort((a, b) => b.c - a.c)
+      .slice(0, 8)
+      .map(({ m }) => m);
+  }, [manifest, likes]);
+
   useEffect(() => {
     if (toast) {
       const id = setTimeout(() => setToast(null), 1500);
@@ -162,6 +208,11 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
       if (e.key === '/') { e.preventDefault(); searchRef.current?.focus(); return; }
       if (e.key === '?') { e.preventDefault(); setShowHelp(true); return; }
       if (e.key === 'Escape') { searchRef.current?.blur(); setFocused(-1); return; }
+      if (e.key === 'r' && manifest) {
+        const pool = queryActive ? filtered : manifest.memes;
+        if (pool.length > 0) setModalSlug(pool[Math.floor(Math.random() * pool.length)].slug);
+        return;
+      }
       if (e.key === 'j') {
         setFocused((f) => Math.min(visible.length - 1, f + 1));
         return;
@@ -212,23 +263,101 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     setModalSlug(carouselList[next].slug);
   }, [modalIndex, carouselList]);
 
+  // Infinite scroll: observe a sentinel near the footer and bump the page as
+  // it enters the viewport. Only active when no query is set — spotlight mode
+  // already shows a large set, and pagination would feel wrong there.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (queryActive) return;
+    const el = sentinelRef.current;
+    if (!el || !manifest) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setPage((p) => (p * pageSize < filtered.length ? p + 1 : p));
+        }
+      },
+      { rootMargin: '600px 0px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [queryActive, manifest, filtered.length, pageSize]);
+
   return (
     <>
+      {popular.length > 0 && !queryActive && (
+        <section className="popular-strip" aria-label="Most-liked memes">
+          <h2 className="popular-heading">⬢ most liked</h2>
+          <div className="popular-scroll">
+            {popular.map((m) => (
+              <button
+                key={m.slug}
+                type="button"
+                className="popular-item"
+                onClick={() => setModalSlug(m.slug)}
+                aria-label={`Open ${m.title || m.slug}`}
+              >
+                <img src={memeUrl(m.filename)} alt={m.title || m.slug} loading="lazy" />
+                <span className="popular-badge">♥ {likes[m.slug]}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="search" role="search">
-        <input
-          ref={searchRef}
-          type="search"
-          placeholder="search tags — e.g. sergey, moon, wagmi  (press / to focus)"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="Search memes by tag"
-        />
+        <div className="search-wrap">
+          <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polygon points="12,2 21,7 21,17 12,22 3,17 3,7" />
+          </svg>
+          <input
+            ref={searchRef}
+            type="search"
+            placeholder="search tags — e.g. sergey, moon, wagmi  (/ to focus)"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setShowSuggestions(true); }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && suggestions.length > 0) {
+                e.preventDefault();
+                applySuggestion(suggestions[0][0]);
+              }
+            }}
+            aria-label="Search memes by tag"
+            autoComplete="off"
+          />
+          {query && (
+            <button
+              type="button"
+              className="search-clear"
+              onClick={() => setQuery('')}
+              aria-label="Clear search"
+            >×</button>
+          )}
+          {suggestions.length > 0 && (
+            <ul className="suggestions" role="listbox">
+              {suggestions.map(([tag, count]) => (
+                <li key={tag}>
+                  <button
+                    type="button"
+                    className="suggestion"
+                    onMouseDown={(e) => { e.preventDefault(); applySuggestion(tag); }}
+                  >
+                    <span className="suggestion-tag">#{tag}</span>
+                    <span className="suggestion-count">{count}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <button
           type="button"
           className={`filter-pill ${animatedOnly ? 'active' : ''}`}
           onClick={() => setAnimatedOnly((v) => !v)}
         >
-          GIFs only
+          <span className="hex" aria-hidden="true">⬢</span> GIFs
         </button>
         <button
           type="button"
@@ -236,11 +365,27 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
           onClick={() => setFavoritesOnly((v) => !v)}
           disabled={favorites.size === 0}
         >
-          Favorites ({favorites.size})
+          <span className="hex" aria-hidden="true">♥</span> Favorites · {favorites.size}
         </button>
-        <button type="button" className="filter-pill" onClick={() => setShowHelp(true)} aria-label="Keyboard shortcuts">
-          ?
+        <button
+          type="button"
+          className="filter-pill"
+          onClick={() => {
+            const pool = queryActive ? filtered : (manifest?.memes ?? []);
+            if (pool.length === 0) return;
+            setModalSlug(pool[Math.floor(Math.random() * pool.length)].slug);
+          }}
+          aria-label="Open a random meme"
+        >
+          <span className="hex" aria-hidden="true">⬡</span> Random
         </button>
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={() => setShowHelp(true)}
+          aria-label="Keyboard shortcuts"
+          title="Keyboard shortcuts"
+        >?</button>
       </div>
 
       {queryActive && (
@@ -281,10 +426,8 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
       )}
 
       {!queryActive && visible.length < filtered.length && (
-        <div style={{ textAlign: 'center', marginTop: 24 }}>
-          <button type="button" className="btn" onClick={() => setPage((p) => p + 1)}>
-            𝚖⬡𝚛𝚎 𝚖𝚎𝚖𝚎 ({filtered.length - visible.length} more)
-          </button>
+        <div ref={sentinelRef} className="load-sentinel" aria-hidden="true">
+          <span>⬢ loading more ⬢</span>
         </div>
       )}
 
@@ -404,11 +547,12 @@ function KeyboardHelp({ onClose }: { onClose: () => void }) {
         <h3>⬡ Keyboard shortcuts</h3>
         <dl>
           <dt>/</dt><dd>focus search</dd>
-          <dt>j</dt><dd>next meme</dd>
-          <dt>k</dt><dd>previous meme</dd>
+          <dt>j / k</dt><dd>next / previous meme</dd>
           <dt>Enter</dt><dd>open focused meme</dd>
           <dt>f</dt><dd>favorite focused</dd>
           <dt>c</dt><dd>copy permalink</dd>
+          <dt>r</dt><dd>random meme</dd>
+          <dt>← / →</dt><dd>step through in modal</dd>
           <dt>?</dt><dd>this help</dd>
           <dt>Esc</dt><dd>close / unfocus</dd>
         </dl>

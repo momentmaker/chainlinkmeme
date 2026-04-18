@@ -15,15 +15,14 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const manifestHref = `${base}/manifest.json`;
 
 // Stats strip — computed at build time, shown once in the footer.
-const lastUpdated = [...manifest.memes]
-  .map((m) => m.date_added)
-  .filter(Boolean)
-  .sort()
-  .pop() ?? '';
+// "last built" reflects the manifest generation time (≈ last deploy). Using
+// date_added maxima is misleading here because every legacy meme shares the
+// 2020-02-11 import placeholder.
+const lastBuilt = manifest.generated_at ? manifest.generated_at.slice(0, 10) : '';
 const stats = {
   memes: manifest.memes.length.toLocaleString(),
   tags: manifest.tags.length.toLocaleString(),
-  lastUpdated,
+  lastBuilt,
 };
 ---
 <Base
@@ -59,7 +58,7 @@ const stats = {
     <span class="dot">⬡</span>
     <span><strong>{stats.tags}</strong> tags</span>
     <span class="dot">⬡</span>
-    <span>last updated <strong>{stats.lastUpdated}</strong></span>
+    <span>last built <strong>{stats.lastBuilt}</strong></span>
   </p>
 </Base>
 

@@ -20,8 +20,23 @@ const related = manifest.memes
   .filter((m) => m.slug !== meme.slug && m.tags.some((t) => meme.tags.includes(t)))
   .slice(0, 6);
 
+// Legacy imports inherit the md5-hex filename as a placeholder title. If the
+// title looks like one of those, prefer the first tag (mirrors the OG card).
+const looksLikeHash = /^[0-9a-f]{10,}$/i.test(meme.title || meme.slug);
+const displayTitle = meme.title && !/^[0-9a-f]{10,}$/i.test(meme.title)
+  ? meme.title
+  : (meme.tags[0] ? `#${meme.tags[0]}` : 'chainlink meme');
+
+// Step through the archive in manifest order for next/prev navigation. Keeps
+// the permalink experience symmetric with the modal's keyboard carousel.
+const memes = manifest.memes;
+const idx = memes.findIndex((m) => m.slug === meme.slug);
+const prev = idx > 0 ? memes[idx - 1] : null;
+const next = idx >= 0 && idx < memes.length - 1 ? memes[idx + 1] : null;
+
 const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://chainlinkme.me';
 const ogImage = `${siteUrl}/og/${meme.slug}.png`;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 <Base
   title={meme.title ? `${meme.title} — chainlink meme` : `${meme.slug} — chainlink meme`}
@@ -38,11 +53,11 @@ const ogImage = `${siteUrl}/og/${meme.slug}.png`;
       style={`view-transition-name: meme-${meme.slug};`}
     />
     <div class="permalink-meta">
-      <h1 class="permalink-title">{meme.title || meme.slug}</h1>
-      {meme.description && <p>{meme.description}</p>}
+      <h1 class="permalink-title">{displayTitle}</h1>
+      {meme.description && <p class="permalink-description">{meme.description}</p>}
       <div class="permalink-tags">
         {meme.tags.map((t) => (
-          <a href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/?q=${encodeURIComponent(t)}`} class="tag-chip">#{t}</a>
+          <a href={`${base}/?q=${encodeURIComponent(t)}`} class="tag-chip">#{t}</a>
         ))}
       </div>
       {(meme.credit || meme.submitted_by) && (
@@ -54,16 +69,27 @@ const ogImage = `${siteUrl}/og/${meme.slug}.png`;
         </p>
       )}
       <div class="permalink-actions">
-        <a class="btn" href={memeUrl(meme.filename)} download>download</a>
-        <a class="btn ghost" href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/`}>← back to gallery</a>
+        <button type="button" class="btn copy-link-btn" data-permalink>copy link</button>
+        <a class="btn ghost" href={memeUrl(meme.filename)} download target="_blank" rel="noopener">download</a>
+        <a class="btn ghost"
+           href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(displayTitle + ' — chainlinkme.me')}&url=${encodeURIComponent(siteUrl + Astro.url.pathname)}`}
+           target="_blank" rel="noopener">share →</a>
       </div>
+
+      <nav class="permalink-nav">
+        {prev ? (
+          <a class="btn ghost" href={permalinkUrl(prev.slug)}>← previous</a>
+        ) : <span class="btn ghost" aria-disabled="true" style="opacity:0.3">← previous</span>}
+        <a class="btn ghost" href={`${base}/`}>gallery</a>
+        {next ? (
+          <a class="btn ghost" href={permalinkUrl(next.slug)}>next →</a>
+        ) : <span class="btn ghost" aria-disabled="true" style="opacity:0.3">next →</span>}
+      </nav>
     </div>
 
     {related.length > 0 && (
-      <section style="margin-top: 40px;">
-        <h2 style="font-size: 14px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;">
-          related memes
-        </h2>
+      <section class="related-section">
+        <h2 class="related-heading">⬢ related memes</h2>
         <div class="gallery">
           {related.map((r) => (
             <a href={permalinkUrl(r.slug)} class="card">
@@ -74,4 +100,19 @@ const ogImage = `${siteUrl}/og/${meme.slug}.png`;
       </section>
     )}
   </article>
+
+  <script>
+    const copyBtn = document.querySelector<HTMLButtonElement>('[data-permalink]');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(window.location.href);
+          copyBtn.textContent = '✓ copied';
+          setTimeout(() => { copyBtn.textContent = 'copy link'; }, 1500);
+        } catch {
+          copyBtn.textContent = 'copy failed';
+        }
+      });
+    }
+  </script>
 </Base>
