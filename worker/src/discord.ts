@@ -54,8 +54,13 @@ async function loadManifest(origin: string): Promise<Manifest> {
   return cachedManifest;
 }
 
-function hexToBytes(hex: string): Uint8Array {
-  const out = new Uint8Array(hex.length / 2);
+// Explicit ArrayBuffer (not ArrayBufferLike) so the result is assignable to
+// BufferSource. TS 5.7+ made Uint8Array generic over its backing buffer and
+// defaults to ArrayBufferLike (ArrayBuffer | SharedArrayBuffer), which
+// crypto.subtle.importKey/verify reject. Constructing over a fresh
+// ArrayBuffer pins the generic parameter.
+function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(new ArrayBuffer(hex.length / 2));
   for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
   return out;
 }
@@ -73,7 +78,11 @@ async function verifySignature(publicKeyHex: string, signatureHex: string, times
       ['verify'],
     );
     const sig = hexToBytes(signatureHex);
-    const msg = new TextEncoder().encode(timestamp + body);
+    // TextEncoder.encode also returns Uint8Array<ArrayBufferLike>; copy into
+    // a fresh ArrayBuffer-backed view so it satisfies BufferSource.
+    const encoded = new TextEncoder().encode(timestamp + body);
+    const msg = new Uint8Array(new ArrayBuffer(encoded.byteLength));
+    msg.set(encoded);
     return await crypto.subtle.verify('Ed25519', key, sig, msg);
   } catch {
     return false;

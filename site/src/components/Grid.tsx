@@ -377,8 +377,11 @@ export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
       const dx = Math.abs(t.x - p.x);
       const dy = Math.abs(t.y - p.y);
       if (dx > apothem || dy > TILE_R) continue;
-      // Edge test: apothem * TILE_R >= apothem * dx + TILE_R * dy / 2
-      if (apothem * TILE_R < apothem * dx + (TILE_R * dy) / 2) continue;
+      // Sloped-edge equation for the top-right edge from (0, R) to (apothem, R/2):
+      // R·x + 2·apothem·y = 2·apothem·R, so inside when R·|dx|/2 + apothem·|dy| ≤ apothem·R.
+      // Outside when that sum exceeds apothem·R. An earlier draft had the
+      // dx/dy coefficients swapped and misclassified the hex corners as outside.
+      if (apothem * TILE_R < (TILE_R * dx) / 2 + apothem * dy) continue;
       const d = dx * dx + dy * dy;
       if (d < bestDist) { bestDist = d; best = t; }
     }

@@ -209,7 +209,10 @@ export default {
       const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit') || '24')));
       try {
         const m = await loadApiManifest(env.SITE_ORIGIN);
-        const rawTokens = q.split(/[\s,]+/).map((t) => t.toLowerCase()).filter(Boolean);
+        // Cap tokens so a pathological query ("a+b+c+..." × thousands) can't
+        // force an O(memes × tokens) scoring loop large enough to time the
+        // worker out. 20 is well above any realistic human query.
+        const rawTokens = q.split(/[\s,]+/).map((t) => t.toLowerCase()).filter(Boolean).slice(0, 20);
         const expanded = expandQuery(rawTokens, m.synonyms, m.related);
         const ref = m.repo_ref || 'main';
         const results = m.memes
