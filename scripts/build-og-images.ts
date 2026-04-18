@@ -409,6 +409,265 @@ async function main() {
   } catch (err) {
     console.error(`[og] home card: ${(err as Error).message}`);
   }
+
+  // Discord / social banner — 680×240 (17:6). Same visual language as the
+  // home OG (hex mosaic + dark brand strip), just letterboxed.
+  try {
+    const bannerPng = await renderBanner(manifest.memes, font);
+    fs.writeFileSync(path.join(OG_DIR, '_discord-banner.png'), bannerPng);
+    console.log('[og] _discord-banner.png rendered');
+  } catch (err) {
+    console.error(`[og] discord banner: ${(err as Error).message}`);
+  }
+
+  // X / Twitter banner — 1500×500 (3:1). Wider canvas = more hexes, bigger
+  // wordmark. Same visual language as the other banners.
+  try {
+    const xBannerPng = await renderXBanner(manifest.memes, font);
+    fs.writeFileSync(path.join(OG_DIR, '_x-banner.png'), xBannerPng);
+    console.log('[og] _x-banner.png rendered');
+  } catch (err) {
+    console.error(`[og] x banner: ${(err as Error).message}`);
+  }
+}
+
+async function renderXBanner(memes: Meme[], font: ArrayBuffer): Promise<Buffer> {
+  const CANVAS_W = 1500, CANVAS_H = 500;
+  const COUNT = 75;
+  const step = Math.max(1, memes.length / COUNT);
+  const picked: Meme[] = [];
+  for (let i = 0; picked.length < COUNT && Math.floor(i * step) < memes.length; i++) {
+    picked.push(memes[Math.floor(i * step)]);
+  }
+
+  const W = 95, H = 110;
+  const HSTEP = W;
+  const VSTEP = Math.round(H * 0.75);
+  const ROWS = 5, COLS = 15;
+  const gridW = COLS * HSTEP + HSTEP / 2;
+  const gridH = (ROWS - 1) * VSTEP + H;
+  const xOrigin = Math.round((CANVAS_W - gridW) / 2);
+  const yOrigin = Math.round((CANVAS_H - gridH) / 2);
+
+  const cells: unknown[] = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const i = r * COLS + c;
+      if (i >= picked.length) break;
+      const m = picked[i];
+      const xShift = r % 2 === 0 ? 0 : HSTEP / 2;
+      const x = xOrigin + c * HSTEP + xShift;
+      const y = yOrigin + r * VSTEP;
+      cells.push({
+        type: 'div',
+        props: {
+          style: {
+            position: 'absolute',
+            left: x, top: y, width: W, height: H,
+            display: 'flex', overflow: 'hidden',
+            clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+          },
+          children: [{
+            type: 'img',
+            props: {
+              src: thumbnailDataUrl(m.filename, W, H),
+              style: { width: '100%', height: '100%', objectFit: 'cover' },
+            },
+          }],
+        },
+      });
+    }
+  }
+
+  const tree = {
+    type: 'div',
+    props: {
+      style: {
+        width: CANVAS_W, height: CANVAS_H,
+        display: 'flex', position: 'relative',
+        fontFamily: 'Inter',
+        background: 'linear-gradient(135deg, #2f62df 0%, #1a3ba7 55%, #0d2270 100%)',
+        color: 'white',
+        overflow: 'hidden',
+      },
+      children: [
+        ...cells,
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', inset: 0,
+            background: 'radial-gradient(ellipse 70% 65% at 50% 50%, rgba(13,34,112,0.05) 0%, rgba(13,34,112,0.55) 55%, rgba(13,34,112,0.9) 100%)',
+          },
+        } },
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', left: 0, right: 0, top: 160, height: 180,
+            background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.7) 20%, rgba(0,0,0,0.82) 50%, rgba(0,0,0,0.7) 80%, transparent 100%)',
+          },
+        } },
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', left: 0, right: 0, top: 180,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: 16, fontSize: 26, fontWeight: 700, letterSpacing: 7,
+            textTransform: 'uppercase', opacity: 0.95,
+          },
+          children: [
+            hexImg(22, 'white', 0.9, false),
+            hexImg(22, 'white', 0.9, true),
+            hexImg(22, 'white', 0.9, false),
+            { type: 'span', props: { style: { display: 'flex', margin: '0 10px' }, children: 'chainlink meme' } },
+            hexImg(22, 'white', 0.9, false),
+            hexImg(22, 'white', 0.9, true),
+            hexImg(22, 'white', 0.9, false),
+          ],
+        } },
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', left: 0, right: 0, top: 222,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 112, fontWeight: 900, letterSpacing: -4, lineHeight: 1,
+          },
+          children: 'chainlinkme.me',
+        } },
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', left: 0, right: 0, top: 355,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 20, fontWeight: 600, letterSpacing: 4,
+            textTransform: 'uppercase', opacity: 0.8,
+          },
+          children: 'cosmic memes by linkmarines · /clmeme in your discord',
+        } },
+      ],
+    },
+  };
+
+  const svg = await satori(tree as unknown as Parameters<typeof satori>[0], {
+    width: CANVAS_W, height: CANVAS_H,
+    fonts: [{ name: 'Inter', data: font, style: 'normal', weight: 800 }],
+  });
+  return Buffer.from(new Resvg(svg).render().asPng());
+}
+
+// Discord bot banner: 680×240, hex-packed meme mosaic with a centered
+// brand strip. Same pattern as the home OG, different proportions.
+async function renderBanner(memes: Meme[], font: ArrayBuffer): Promise<Buffer> {
+  const CANVAS_W = 680, CANVAS_H = 240;
+  const COUNT = 48;
+  const step = Math.max(1, memes.length / COUNT);
+  const picked: Meme[] = [];
+  for (let i = 0; picked.length < COUNT && Math.floor(i * step) < memes.length; i++) {
+    picked.push(memes[Math.floor(i * step)]);
+  }
+
+  const W = 62, H = 72;
+  const HSTEP = W;
+  const VSTEP = Math.round(H * 0.75); // 54
+  const ROWS = 4, COLS = 12;
+  const gridW = COLS * HSTEP + HSTEP / 2;
+  const gridH = (ROWS - 1) * VSTEP + H;
+  const xOrigin = Math.round((CANVAS_W - gridW) / 2);
+  const yOrigin = Math.round((CANVAS_H - gridH) / 2);
+
+  const cells: unknown[] = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const i = r * COLS + c;
+      if (i >= picked.length) break;
+      const m = picked[i];
+      const xShift = r % 2 === 0 ? 0 : HSTEP / 2;
+      const x = xOrigin + c * HSTEP + xShift;
+      const y = yOrigin + r * VSTEP;
+      cells.push({
+        type: 'div',
+        props: {
+          style: {
+            position: 'absolute',
+            left: x, top: y, width: W, height: H,
+            display: 'flex', overflow: 'hidden',
+            clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+          },
+          children: [{
+            type: 'img',
+            props: {
+              src: thumbnailDataUrl(m.filename, W, H),
+              style: { width: '100%', height: '100%', objectFit: 'cover' },
+            },
+          }],
+        },
+      });
+    }
+  }
+
+  const tree = {
+    type: 'div',
+    props: {
+      style: {
+        width: CANVAS_W, height: CANVAS_H,
+        display: 'flex', position: 'relative',
+        fontFamily: 'Inter',
+        background: 'linear-gradient(135deg, #2f62df 0%, #1a3ba7 55%, #0d2270 100%)',
+        color: 'white',
+        overflow: 'hidden',
+      },
+      children: [
+        ...cells,
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', inset: 0,
+            background: 'radial-gradient(ellipse 70% 70% at 50% 50%, rgba(13,34,112,0.1) 0%, rgba(13,34,112,0.65) 60%, rgba(13,34,112,0.9) 100%)',
+          },
+        } },
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', left: 0, right: 0, top: 70, height: 100,
+            background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.7) 20%, rgba(0,0,0,0.8) 50%, rgba(0,0,0,0.7) 80%, transparent 100%)',
+          },
+        } },
+        // Brand hex marks + "chainlinkme.me" wordmark centered.
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', left: 0, right: 0, top: 80,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: 10, fontSize: 15, fontWeight: 700, letterSpacing: 5,
+            textTransform: 'uppercase', opacity: 0.95,
+          },
+          children: [
+            hexImg(13, 'white', 0.9, false),
+            hexImg(13, 'white', 0.9, true),
+            hexImg(13, 'white', 0.9, false),
+            { type: 'span', props: { style: { display: 'flex', margin: '0 6px' }, children: 'chainlink meme' } },
+            hexImg(13, 'white', 0.9, false),
+            hexImg(13, 'white', 0.9, true),
+            hexImg(13, 'white', 0.9, false),
+          ],
+        } },
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', left: 0, right: 0, top: 108,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 52, fontWeight: 900, letterSpacing: -2, lineHeight: 1,
+          },
+          children: 'chainlinkme.me',
+        } },
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', left: 0, right: 0, top: 168,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, fontWeight: 600, letterSpacing: 3,
+            textTransform: 'uppercase', opacity: 0.75,
+          },
+          children: '/clmeme · cosmic memes by linkmarines',
+        } },
+      ],
+    },
+  };
+
+  const svg = await satori(tree as unknown as Parameters<typeof satori>[0], {
+    width: CANVAS_W, height: CANVAS_H,
+    fonts: [{ name: 'Inter', data: font, style: 'normal', weight: 800 }],
+  });
+  return Buffer.from(new Resvg(svg).render().asPng());
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });
