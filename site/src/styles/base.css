@@ -986,7 +986,15 @@ a:hover { text-decoration: underline; }
   color: var(--muted);
   font-size: 12px;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
 }
+/* Kill default paragraph margins inside the footer so the flex gap is the
+   only source of vertical spacing. Avoids any browser-specific margin-
+   collapse quirks during massive reflows (e.g. clicking "show all"). */
+.footer > p { margin: 0; }
 .stats-strip {
   display: flex;
   gap: 12px;
@@ -996,7 +1004,6 @@ a:hover { text-decoration: underline; }
   font-family: Menlo, Monaco, monospace;
   font-size: 12px;
   letter-spacing: 0.04em;
-  margin: 0 0 12px;
 }
 .stats-strip strong { color: var(--brand-blue); font-weight: 700; }
 .stats-strip .dot { color: var(--brand-blue); opacity: 0.5; font-size: 10px; }
@@ -1145,7 +1152,6 @@ a:hover { text-decoration: underline; }
 .weekly-index-total { margin-left: auto; color: var(--muted); font-size: 12px; }
 
 .footer .kin {
-  margin: 8px 0 0;
   opacity: 0.55;
   font-size: 11px;
   letter-spacing: 0.05em;
