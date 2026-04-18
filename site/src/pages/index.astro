@@ -31,10 +31,16 @@ const stats = {
   tags: manifest.tags.length.toLocaleString(),
   lastBuilt,
 };
+
+// Home OG — cache-busted by the manifest timestamp so every deploy re-unfurls
+// fresh in Discord/Twitter/Telegram. Same file path, new query, new hash.
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://chainlinkme.me';
+const homeOg = `${siteUrl}/og/_home.png?v=${encodeURIComponent(lastBuilt || 'initial')}`;
 ---
 <Base
   title="⬡⏣⬢ chainlink meme ⬢⏣⬡"
   description="community-curated archive of chainlink memes — browse, search by tag, favorite, share"
+  ogImage={homeOg}
 >
   <Fragment slot="head-extra">
     <link rel="preload" href={manifestHref} as="fetch" crossorigin="anonymous" />

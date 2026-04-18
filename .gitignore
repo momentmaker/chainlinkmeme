@@ -21,3 +21,4 @@ worker/dist
 # editor
 .vscode
 .idea
+.claude

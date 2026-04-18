@@ -73,7 +73,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
       )}
       <div class="permalink-actions">
         <button type="button" class="btn copy-link-btn" data-permalink>copy link</button>
-        <a class="btn ghost" href={memeUrl(meme.filename)} download target="_blank" rel="noopener">download</a>
+        <button type="button" class="btn ghost" data-download data-url={memeUrl(meme.filename)} data-filename={meme.filename}>download</button>
         <a class="btn ghost"
            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(displayTitle + ' — chainlinkme.me')}&url=${encodeURIComponent(siteUrl + Astro.url.pathname)}`}
            target="_blank" rel="noopener">share →</a>
@@ -105,17 +105,70 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   </article>
 
   <script>
-    const copyBtn = document.querySelector<HTMLButtonElement>('[data-permalink]');
-    if (copyBtn) {
-      copyBtn.addEventListener('click', async () => {
-        try {
-          await navigator.clipboard.writeText(window.location.href);
-          copyBtn.textContent = '✓ copied';
-          setTimeout(() => { copyBtn.textContent = 'copy link'; }, 1500);
-        } catch {
-          copyBtn.textContent = 'copy failed';
-        }
-      });
+    // Bundled scripts run once per hard load; with Astro ClientRouter,
+    // navigating between permalinks swaps the DOM without re-executing
+    // module scripts. Re-binding on astro:page-load (which also fires
+    // on initial load) keeps copy-link and download working on every
+    // permalink visit.
+    function wirePermalinkActions() {
+      const copyBtn = document.querySelector<HTMLButtonElement>('[data-permalink]');
+      if (copyBtn && !copyBtn.dataset.bound) {
+        copyBtn.dataset.bound = '1';
+        copyBtn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(window.location.href);
+            copyBtn.textContent = '✓ copied';
+            setTimeout(() => { copyBtn.textContent = 'copy link'; }, 1500);
+          } catch {
+            copyBtn.textContent = 'copy failed';
+          }
+        });
+      }
+
+      // Cross-origin download: browsers ignore the `download` attribute
+      // when the href points to a different origin (jsDelivr), so fetch
+      // the image as a blob and trigger the save dialog through a
+      // temporary object-URL link. Falls back to opening the image in a
+      // new tab if the cross-origin fetch is blocked.
+      const dlBtn = document.querySelector<HTMLButtonElement>('[data-download]');
+      if (dlBtn && !dlBtn.dataset.bound) {
+        dlBtn.dataset.bound = '1';
+        dlBtn.addEventListener('click', async () => {
+          const url = dlBtn.dataset.url;
+          const filename = dlBtn.dataset.filename;
+          if (!url || !filename) return;
+          const w = window as unknown as { umami?: { track: (n: string, d?: Record<string, unknown>) => void } };
+          w.umami?.track('meme-download', { filename });
+          const original = dlBtn.textContent ?? 'download';
+          dlBtn.textContent = 'preparing…';
+          dlBtn.disabled = true;
+          try {
+            const res = await fetch(url, { mode: 'cors' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const blob = await res.blob();
+            const objUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+            dlBtn.textContent = '✓ saved';
+          } catch {
+            window.open(url, '_blank', 'noopener');
+            dlBtn.textContent = 'opened in new tab';
+          } finally {
+            setTimeout(() => {
+              dlBtn.textContent = original;
+              dlBtn.disabled = false;
+            }, 1500);
+          }
+        });
+      }
     }
+
+    wirePermalinkActions();
+    document.addEventListener('astro:page-load', wirePermalinkActions);
   </script>
 </Base>

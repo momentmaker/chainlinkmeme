@@ -13,6 +13,16 @@ const THEME_KEY = 'chainlinkmeme:theme';
 
 type Likes = Record<string, number>;
 
+// Umami custom-event helper — fire-and-forget. Wrapped so the rest of the
+// code can call `track('x')` without null-checking window.umami at every site.
+interface UmamiWindow { umami?: { track: (name: string, data?: Record<string, unknown>) => void } }
+function track(name: string, data?: Record<string, unknown>) {
+  try {
+    const w = window as unknown as UmamiWindow;
+    w.umami?.track(name, data);
+  } catch { /* ignore */ }
+}
+
 function loadFavorites(): Set<string> {
   if (typeof localStorage === 'undefined') return new Set();
   try {
@@ -183,6 +193,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     setQuery(`${prefix}${tag}`);
     setShowSuggestions(false);
     searchRef.current?.focus();
+    track('search-suggestion', { tag });
   }, [query]);
 
   // Top 8 most-liked memes, hidden until the archive has real community votes.
@@ -212,8 +223,8 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   const toggleFavorite = useCallback((slug: string) => {
     setFavorites((prev) => {
       const next = new Set(prev);
-      if (next.has(slug)) next.delete(slug);
-      else next.add(slug);
+      if (next.has(slug)) { next.delete(slug); track('meme-unfavorite', { slug }); }
+      else { next.add(slug); track('meme-favorite', { slug }); }
       saveFavorites(next);
       return next;
     });
@@ -233,6 +244,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
 
   const copyPermalink = useCallback((slug: string) => {
     const url = new URL(permalinkUrl(slug), window.location.origin).toString();
+    track('meme-copy-link', { slug });
     navigator.clipboard.writeText(url).then(
       () => setToast('link copied'),
       () => setToast('copy failed'),
@@ -278,6 +290,13 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
       }
     }
   }, [modalIndex, carouselList]);
+
+  // Track any meme view — covers initial open + arrow-key steps. Umami
+  // treats this as a distinct custom event per slug, enough to rank the most
+  // looked-at memes without touching every open site.
+  useEffect(() => {
+    if (modalSlug) track('meme-view', { slug: modalSlug });
+  }, [modalSlug]);
 
   // While the new image is decoding, keep the slug we last successfully showed
   // so the <img> element isn't blank — but only for the brief load window.
@@ -444,14 +463,14 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
         <button
           type="button"
           className={`filter-pill ${animatedOnly ? 'active' : ''}`}
-          onClick={() => setAnimatedOnly((v) => !v)}
+          onClick={() => setAnimatedOnly((v) => { track('filter-gifs', { on: !v }); return !v; })}
         >
           <span className="hex" aria-hidden="true">⬢</span> GIFs
         </button>
         <button
           type="button"
           className={`filter-pill ${favoritesOnly ? 'active' : ''}`}
-          onClick={() => setFavoritesOnly((v) => !v)}
+          onClick={() => setFavoritesOnly((v) => { track('filter-favorites', { on: !v }); return !v; })}
           disabled={favorites.size === 0}
         >
           <span className="hex" aria-hidden="true">♥</span> Favorites · {favorites.size}
@@ -462,6 +481,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
           onClick={() => {
             const pool = queryActive ? filtered : (manifest?.memes ?? []);
             if (pool.length === 0) return;
+            track('random-click', { pool: queryActive ? 'filtered' : 'all' });
             setModalSlug(pool[Math.floor(Math.random() * pool.length)].slug);
           }}
           aria-label="Open a random meme"
@@ -536,7 +556,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
             <button
               type="button"
               className="filter-pill"
-              onClick={() => setShowAll(true)}
+              onClick={() => { track('show-all', { count: filtered.length }); setShowAll(true); }}
             >
               <span className="hex" aria-hidden="true">⬢</span> show all {filtered.length}
             </button>
@@ -710,7 +730,7 @@ export function ThemeToggle() {
     <button
       type="button"
       className="hex-btn"
-      onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+      onClick={() => setTheme((t) => { const next = t === 'dark' ? 'light' : 'dark'; track('theme-toggle', { to: next }); return next; })}
       aria-label="Toggle theme"
     >
       <span className="hex-btn-label">{mounted ? (theme === 'dark' ? '☀︎' : '☾') : '◐'}</span>

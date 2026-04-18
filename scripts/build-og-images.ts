@@ -19,6 +19,7 @@ interface Meme {
   tags: string[];
   width: number;
   height: number;
+  animated: boolean;
 }
 
 // Satori wants TTF/OTF (not WOFF2). Rather than rely on a network round-trip
@@ -37,6 +38,43 @@ function readImageAsDataUrl(filename: string): string {
   const ext = path.extname(filename).toLowerCase();
   const mime = ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
   return `data:${mime};base64,${buf.toString('base64')}`;
+}
+
+// Pre-thumbnail by running the image through resvg once inside a tiny SVG
+// wrapper. Drops 1-5 MB JPGs down to ~10 KB PNGs before embedding them in
+// the home-OG mosaic — keeps Satori's tree small and Resvg's final parse
+// fast. Without this, rendering 77 full-res images in one SVG takes
+// minutes and sometimes OOMs.
+const thumbCache = new Map<string, string>();
+function thumbnailDataUrl(filename: string, w: number, h: number): string {
+  const key = `${filename}@${w}x${h}`;
+  const hit = thumbCache.get(key);
+  if (hit) return hit;
+  const srcDataUrl = readImageAsDataUrl(filename);
+  const wrapperSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><image href="${srcDataUrl}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice"/></svg>`;
+  const png = new Resvg(wrapperSvg).render().asPng();
+  const dataUrl = `data:image/png;base64,${Buffer.from(png).toString('base64')}`;
+  thumbCache.set(key, dataUrl);
+  return dataUrl;
+}
+
+// Inter-Bold (the vendored OG font) has no glyphs for ⬡ ⬢ ⏣, so they would
+// render as tofu in the card. Render the hex marks as inline SVG images
+// instead — always visually correct regardless of the active font.
+function hexImg(size: number, fill: string, opacity = 1, filled = true) {
+  const stroke = filled ? 'none' : fill;
+  const fillAttr = filled ? fill : 'none';
+  const strokeWidth = filled ? 0 : 5;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 115"><polygon points="50,0 100,28.75 100,86.25 50,115 0,86.25 0,28.75" fill="${fillAttr}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round"/></svg>`;
+  return {
+    type: 'img',
+    props: {
+      src: `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`,
+      width: size,
+      height: Math.round(size * 1.155),
+      style: { opacity },
+    },
+  };
 }
 
 async function renderCard(meme: Meme, font: ArrayBuffer): Promise<Buffer> {
@@ -65,8 +103,16 @@ async function renderCard(meme: Meme, font: ArrayBuffer): Promise<Buffer> {
             style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 },
             children: [
               { type: 'div', props: {
-                style: { fontSize: 22, fontWeight: 700, letterSpacing: 4, textTransform: 'uppercase', opacity: 0.95 },
-                children: '⬡⏣⬢  chainlink meme  ⬢⏣⬡',
+                style: { display: 'flex', alignItems: 'center', gap: 10, fontSize: 22, fontWeight: 700, letterSpacing: 4, textTransform: 'uppercase', opacity: 0.95 },
+                children: [
+                  hexImg(18, 'white', 0.95, false),
+                  hexImg(18, 'white', 0.95, true),
+                  hexImg(18, 'white', 0.95, false),
+                  { type: 'span', props: { style: { display: 'flex', margin: '0 6px' }, children: 'chainlink meme' } },
+                  hexImg(18, 'white', 0.95, false),
+                  hexImg(18, 'white', 0.95, true),
+                  hexImg(18, 'white', 0.95, false),
+                ],
               } },
               { type: 'div', props: {
                 style: { fontSize: 18, fontWeight: 600, letterSpacing: 1, opacity: 0.6, padding: '8px 16px', border: '2px solid rgba(255,255,255,0.25)', borderRadius: 999 },
@@ -104,8 +150,11 @@ async function renderCard(meme: Meme, font: ArrayBuffer): Promise<Buffer> {
                   children: [
                     // Eyebrow
                     { type: 'div', props: {
-                      style: { fontSize: 16, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', opacity: 0.55, marginBottom: 16 },
-                      children: meme.animated ? '⬢ animated meme' : '⬢ meme',
+                      style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', opacity: 0.55, marginBottom: 16 },
+                      children: [
+                        hexImg(14, 'white', 0.9, true),
+                        { type: 'span', props: { style: { display: 'flex' }, children: meme.animated ? 'animated meme' : 'meme' } },
+                      ],
                     } },
                     // Title
                     { type: 'div', props: {
@@ -129,8 +178,13 @@ async function renderCard(meme: Meme, font: ArrayBuffer): Promise<Buffer> {
                             color: i === 0 ? '#1a3ba7' : 'white',
                             border: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.25)',
                             display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
                           },
-                          children: `⬡ ${t}`,
+                          children: [
+                            hexImg(14, i === 0 ? '#1a3ba7' : 'white', 0.95, false),
+                            { type: 'span', props: { style: { display: 'flex' }, children: t } },
+                          ],
                         },
                       })),
                     } },
@@ -153,12 +207,161 @@ async function renderCard(meme: Meme, font: ArrayBuffer): Promise<Buffer> {
   return Buffer.from(png);
 }
 
+// Home OG: a honeycomb mosaic of 77 memes sampled evenly across the archive,
+// dark cosmic vignette, center glass strip with brand + stats. Rebuilt every
+// deploy; the home page cache-busts the URL with manifest.generated_at so
+// unfurls refresh naturally without a dynamic runtime.
+async function renderHomeCard(memes: Meme[], tagCount: number, manifestTime: string, font: ArrayBuffer): Promise<Buffer> {
+  const CANVAS_W = 1200, CANVAS_H = 630;
+  const COUNT = 77;
+  // Sample evenly across the sorted archive so the mosaic reads as "breadth
+  // of the collection" rather than "most recent 77".
+  const step = Math.max(1, memes.length / COUNT);
+  const picked: Meme[] = [];
+  for (let i = 0; picked.length < COUNT && Math.floor(i * step) < memes.length; i++) {
+    picked.push(memes[Math.floor(i * step)]);
+  }
+
+  // Pointy-top hex packing. W/H chosen to fill 1200×630 with 11 cols × 7 rows,
+  // odd rows offset by W/2 for the honeycomb offset. Some tiles bleed past
+  // the right edge of odd rows — the crop reads as organic.
+  const W = 108, H = 125;
+  const HSTEP = W;
+  const VSTEP = Math.round(H * 0.75); // 94
+  const ROWS = 7, COLS = 11;
+  const gridW = COLS * HSTEP + HSTEP / 2;
+  const gridH = (ROWS - 1) * VSTEP + H;
+  const xOrigin = Math.round((CANVAS_W - gridW) / 2);
+  const yOrigin = Math.round((CANVAS_H - gridH) / 2);
+
+  const cells: unknown[] = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const i = r * COLS + c;
+      if (i >= picked.length) break;
+      const m = picked[i];
+      const xShift = r % 2 === 0 ? 0 : HSTEP / 2;
+      const x = xOrigin + c * HSTEP + xShift;
+      const y = yOrigin + r * VSTEP;
+      cells.push({
+        type: 'div',
+        props: {
+          style: {
+            position: 'absolute',
+            left: x,
+            top: y,
+            width: W,
+            height: H,
+            display: 'flex',
+            overflow: 'hidden',
+            clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+          },
+          children: [{
+            type: 'img',
+            props: {
+              src: thumbnailDataUrl(m.filename, W, H),
+              style: { width: '100%', height: '100%', objectFit: 'cover' },
+            },
+          }],
+        },
+      });
+    }
+  }
+
+  const tree = {
+    type: 'div',
+    props: {
+      style: {
+        width: CANVAS_W,
+        height: CANVAS_H,
+        display: 'flex',
+        position: 'relative',
+        fontFamily: 'Inter',
+        background: 'linear-gradient(135deg, #2f62df 0%, #1a3ba7 55%, #0d2270 100%)',
+        color: 'white',
+        overflow: 'hidden',
+      },
+      children: [
+        ...cells,
+        // Edge vignette — darkens the hex grid toward the edges, guides the
+        // eye to the brand strip in the middle.
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', inset: 0,
+            background: 'radial-gradient(ellipse 70% 60% at 50% 50%, rgba(13,34,112,0.05) 0%, rgba(13,34,112,0.55) 55%, rgba(13,34,112,0.9) 100%)',
+          },
+        } },
+        // Horizontal "letterbox" band behind the brand mark.
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', left: 0, right: 0, top: 215, height: 200,
+            background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.65) 15%, rgba(0,0,0,0.78) 50%, rgba(0,0,0,0.65) 85%, transparent 100%)',
+          },
+        } },
+        // Brand mark
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', left: 0, right: 0, top: 235,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: 14,
+            fontSize: 24, fontWeight: 700, letterSpacing: 6, textTransform: 'uppercase',
+            opacity: 0.95,
+          },
+          children: [
+            hexImg(20, 'white', 0.9, false),
+            hexImg(20, 'white', 0.9, true),
+            hexImg(20, 'white', 0.9, false),
+            { type: 'span', props: { style: { display: 'flex', margin: '0 8px' }, children: 'chainlink meme' } },
+            hexImg(20, 'white', 0.9, false),
+            hexImg(20, 'white', 0.9, true),
+            hexImg(20, 'white', 0.9, false),
+          ],
+        } },
+        // Wordmark — chainlinkme.me in a huge weight with a negative letter
+        // spacing for that condensed display-type vibe.
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', left: 0, right: 0, top: 275,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 96, fontWeight: 900, letterSpacing: -3, lineHeight: 1,
+          },
+          children: 'chainlinkme.me',
+        } },
+        // Tagline + stats — monospace-ish feel via letter spacing.
+        { type: 'div', props: {
+          style: {
+            position: 'absolute', left: 0, right: 0, top: 385,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: 18,
+            fontSize: 18, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase',
+            opacity: 0.85,
+          },
+          children: [
+            { type: 'span', props: { style: { display: 'flex' }, children: `${memes.length.toLocaleString()} memes` } },
+            { type: 'span', props: { style: { display: 'flex', opacity: 0.5 }, children: '·' } },
+            { type: 'span', props: { style: { display: 'flex' }, children: `${tagCount} tags` } },
+            { type: 'span', props: { style: { display: 'flex', opacity: 0.5 }, children: '·' } },
+            { type: 'span', props: { style: { display: 'flex' }, children: `updated ${manifestTime.slice(0, 10)}` } },
+          ],
+        } },
+      ],
+    },
+  };
+
+  const svg = await satori(tree as unknown as Parameters<typeof satori>[0], {
+    width: CANVAS_W,
+    height: CANVAS_H,
+    fonts: [{ name: 'Inter', data: font, style: 'normal', weight: 800 }],
+  });
+  return Buffer.from(new Resvg(svg).render().asPng());
+}
+
 async function main() {
   if (!fs.existsSync(MANIFEST_PATH)) {
     console.error('[og] no manifest.json — run build-manifest.ts first');
     process.exit(1);
   }
-  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8')) as { memes: Meme[] };
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8')) as { memes: Meme[]; tags?: string[]; generated_at?: string };
   fs.mkdirSync(OG_DIR, { recursive: true });
 
   // OG images unfurl permalinks in Discord/Twitter. A broken font source
@@ -191,6 +394,21 @@ async function main() {
     }
   }
   console.log(`[og] done — rendered ${rendered}, skipped ${skipped}`);
+
+  // Home OG — always re-rendered because the sample shifts when new memes
+  // arrive. Cheap vs. the per-meme loop (one image instead of 1,798).
+  try {
+    const homePng = await renderHomeCard(
+      manifest.memes,
+      manifest.tags?.length ?? 0,
+      manifest.generated_at ?? new Date().toISOString(),
+      font,
+    );
+    fs.writeFileSync(path.join(OG_DIR, '_home.png'), homePng);
+    console.log('[og] _home.png rendered');
+  } catch (err) {
+    console.error(`[og] home card: ${(err as Error).message}`);
+  }
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });

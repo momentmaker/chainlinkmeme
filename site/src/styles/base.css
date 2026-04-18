@@ -540,39 +540,56 @@ a:hover { text-decoration: underline; }
    top of both layers. */
 .hex-btn {
   position: relative;
-  width: 48px;
-  height: 54px;
+  width: 40px;
+  height: 46px;
   background: transparent;
   border: none;
   cursor: pointer;
   color: var(--fg);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
+  line-height: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   font-family: inherit;
-  transition: transform 0.15s ease, color 0.15s ease;
+  transition: transform 0.15s ease;
+  flex: none;
 }
 .hex-btn::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: var(--brand-blue);
+  background: var(--card-border);
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  transition: background 0.15s ease;
+  z-index: 0;
 }
 .hex-btn::after {
   content: "";
   position: absolute;
-  inset: 2px;
+  inset: 1.5px;
   background: var(--card-bg);
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  transition: background 0.15s ease;
+  z-index: 0;
 }
-.hex-btn-label { position: relative; z-index: 1; line-height: 1; }
-.hex-btn:hover { color: var(--brand-blue); transform: translateY(-1px); }
-.hex-btn:hover::after { background: rgba(47, 98, 223, 0.08); }
-[data-theme="dark"] .hex-btn:hover::after { background: rgba(47, 98, 223, 0.2); }
+.hex-btn-label {
+  position: relative;
+  z-index: 2;
+  line-height: 1;
+  pointer-events: none;
+}
+.hex-btn:hover { transform: translateY(-1px); }
+.hex-btn:hover::before { background: var(--brand-blue); }
+/* clip-path hides the default outline — use drop-shadow + a saturated
+   border to surface focus for keyboard users. */
+.hex-btn:focus-visible {
+  outline: none;
+  filter: drop-shadow(0 0 3px rgba(47, 98, 223, 0.6));
+}
+.hex-btn:focus-visible::before { background: var(--brand-blue); }
 
 /* Modal */
 .modal-backdrop {
@@ -863,6 +880,15 @@ a:hover { text-decoration: underline; }
 }
 .stats-strip strong { color: var(--brand-blue); font-weight: 700; }
 .stats-strip .dot { color: var(--brand-blue); opacity: 0.5; font-size: 10px; }
+
+.footer .kin {
+  margin: 8px 0 0;
+  opacity: 0.55;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+.footer .kin a { color: var(--muted); }
+.footer .kin a:hover { color: var(--brand-blue); }
 
 /* Hexagon scroll-to-top (ported verbatim from chainlink-meme-react/App.css).
    Hidden off-screen at rest, slides in when scrollY > 100. */
