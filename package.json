@@ -14,7 +14,9 @@
     "og": "tsx scripts/build-og-images.ts",
     "weekly": "tsx scripts/build-weekly.ts",
     "discord:register": "tsx scripts/register-discord-command.ts",
-    "generate-tomls": "tsx scripts/generate-tomls.ts"
+    "generate-tomls": "tsx scripts/generate-tomls.ts",
+    "tweet:daily": "tsx scripts/tweet-daily.ts",
+    "tweet:weekly": "tsx scripts/tweet-weekly.ts"
   },
   "packageManager": "pnpm@10.18.2",
   "dependencies": {
@@ -24,6 +26,7 @@
   },
   "devDependencies": {
     "tsx": "^4.19.2",
+    "twitter-api-v2": "^1.29.0",
     "typescript": "^5.7.3"
   }
 }

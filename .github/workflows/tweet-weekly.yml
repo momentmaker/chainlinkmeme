@@ -1,0 +1,45 @@
+name: tweet-weekly
+
+on:
+  schedule:
+    # Monday 14:30 UTC. weekly.yml writes the snapshot at 09:00 UTC Monday,
+    # giving its commit 5+ hours to propagate to main before we read it.
+    - cron: '30 14 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print the thread text without posting'
+        type: boolean
+        default: false
+
+concurrency:
+  group: tweet-weekly
+  cancel-in-progress: false
+
+jobs:
+  tweet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile=false
+
+      - name: Ensure manifest exists
+        run: pnpm manifest
+
+      - name: Tweet thread
+        env:
+          X_API_KEY:       ${{ secrets.X_API_KEY }}
+          X_API_SECRET:    ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN:  ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+          SITE_URL:        https://chainlinkme.me
+          DRY_RUN:         ${{ inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            pnpm tsx scripts/tweet-weekly.ts --dry-run
+          else
+            pnpm tsx scripts/tweet-weekly.ts
+          fi

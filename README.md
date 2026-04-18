@@ -72,6 +72,14 @@ Summon any meme in your Discord server with `/clmeme <tag>`:
 
 Server admins only need `applications.commands` scope — no bot user, no gateway, no ongoing permissions. Every invocation hits the Cloudflare Worker, which verifies Discord's Ed25519 signature and embeds the meme inline.
 
+### X (Twitter) bot
+Two GitHub-cron-driven bots broadcast the archive:
+
+- **Daily**: once a day at 14:00 UTC, `/tweet-daily` posts the meme-of-the-day — same meme the site's hero shows. Static memes post as a bare permalink so X unfurls the per-meme OG card; animated memes upload the GIF so it plays in-feed.
+- **Weekly**: every Monday 14:30 UTC, `/tweet-weekly` posts a thread — one opener + one reply per top-7 meme — pulled from the freshest `site/src/data/weekly/YYYY-Www.json` snapshot.
+
+~40 tweets/month total, well under X's Free-tier 500-post cap. No read endpoints are used, so nothing needs a paid plan. Secrets (`X_API_KEY` / `X_API_SECRET` / `X_ACCESS_TOKEN` / `X_ACCESS_SECRET`) live in GitHub Actions.
+
 ### Sticker export
 Each permalink page has a **save as sticker** button that renders the meme to a 512×512 WebP — drop it straight into Telegram, Discord, or Slack.
 
@@ -94,6 +102,8 @@ pnpm manifest                    # regenerate site/public/manifest.json from mem
 pnpm og                          # rebuild OG images (cache-friendly)
 pnpm validate                    # PR-style schema + vocab + uniqueness checks
 pnpm weekly                      # compute this week's top-7 snapshot
+pnpm tweet:daily -- --dry-run    # preview today's daily tweet
+pnpm tweet:weekly -- --dry-run   # preview this week's top-7 thread
 pnpm discord:register            # (re)register the /clmeme slash command
 ```
 
