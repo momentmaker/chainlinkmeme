@@ -250,12 +250,14 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     if (!ctx) return;
 
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const narrow = window.innerWidth < 768;
-    // Feature gates. Mobile keeps a quiet starfield + static nebula but
-    // drops comets (the expensive "wow" layer) and twinkle/breath. Reduced-
-    // motion users get the fully-still scene.
-    const starCount = narrow ? 80 : 260;
-    const enableComets = !reduce && !narrow;
+    // Feature gates. Mobile (<768px) keeps a quiet starfield + static
+    // nebula but drops comets and twinkle/breath. Reduced-motion users get
+    // the fully-still scene. The viewport-dependent gates (starCount,
+    // enableComets) are `let` so they can recompute in resize() — a device
+    // rotation or window drag across the boundary should update the scene.
+    let narrow = window.innerWidth < 768;
+    let starCount = narrow ? 80 : 260;
+    let enableComets = !reduce && !narrow;
     const enableTwinkle = !reduce;
     const enableBreath = !reduce;
     // The scene lives: stars twinkle, nebula breathes, comets fly. That
@@ -287,10 +289,18 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
       canvas!.height = rect.height * currentDpr;
       canvas!.style.width = rect.width + 'px';
       canvas!.style.height = rect.height + 'px';
-      // Regenerate ambient layers when the canvas resizes — star density
-      // and nebula positions are relative to the viewport, and stale stars
-      // from a pre-resize layout leave empty patches after a viewport
-      // change.
+      // Recompute viewport-dependent gates. If the user crossed the mobile
+      // boundary we adjust star count + comet enablement before the next
+      // frame. Also clear any live comets if comets just got disabled, so
+      // a frozen-in-place comet doesn't linger.
+      const wasCometEnabled = enableComets;
+      narrow = window.innerWidth < 768;
+      starCount = narrow ? 80 : 260;
+      enableComets = !reduce && !narrow;
+      if (wasCometEnabled && !enableComets) cometsRef.current = [];
+      // Regenerate ambient layers — star density + nebula positions are
+      // relative to viewport; stale stars from a pre-resize layout leave
+      // empty patches after a viewport change.
       starsRef.current = generateStars(rect.width, rect.height, starCount);
       nebulaeRef.current = generateNebulae(rect.width, rect.height);
       markDirty();
@@ -431,7 +441,7 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
       if (enableComets) {
         ctx!.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
         // Maybe spawn a new one — but never more than 2 live at once.
-        if (t - (lastCometSpawn - startTime) > nextCometDelay && cometsRef.current.length < 2) {
+        if (now - lastCometSpawn > nextCometDelay && cometsRef.current.length < 2) {
           cometsRef.current.push(spawnComet(w, h));
           lastCometSpawn = now;
           nextCometDelay = 15000 + Math.random() * 25000;  // 15–40s between spawns
