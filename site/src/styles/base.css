@@ -355,6 +355,18 @@ a:hover { text-decoration: underline; }
 .card-link:hover { background: rgba(47, 98, 223, 0.9); transform: scale(1.1); }
 .card-link:focus-visible { opacity: 1; outline: none; filter: drop-shadow(0 0 3px rgba(47, 98, 223, 0.7)); }
 
+/* When a .card-link is reused outside the gallery-card context (modal +
+   permalink overlays), drop its card-specific absolute position + hidden-
+   until-hover behavior. The overlay container already positions the
+   group; the hex buttons just flow inline inside it. */
+.modal-overlay-top-right .card-link,
+.permalink-overlay-top-right .card-link {
+  position: relative;
+  top: auto;
+  right: auto;
+  opacity: 1;
+}
+
 .like-btn, .tag-btn {
   background: rgba(255,255,255,0.95);
   border: none;

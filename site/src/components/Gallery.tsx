@@ -448,6 +448,10 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   // The sentinel stops at MAX_AUTO_PAGES so the footer becomes reachable;
   // users can click "show all" to keep going.
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  // Swipe state lives at component scope so a mid-gesture re-render (e.g.
+  // toggling a favorite between touchstart and touchend) doesn't reset the
+  // origin and make the whole screen seem to swipe on release.
+  const swipeRef = useRef({ x: 0, y: 0, t: 0 });
   useEffect(() => {
     if (queryActive || showAll) return;
     const el = sentinelRef.current;
@@ -649,20 +653,20 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
         const rs = reactions[modalMeme.slug] ?? EMPTY_REACTIONS;
         const total = rs.heart + rs.laugh + rs.bolt + rs.diamond;
         const liked = favorites.has(modalMeme.slug);
-        // Swipe handlers kept inline so they close over the current modal's
-        // stepModal + list bounds without extra plumbing.
-        let swipeX = 0, swipeY = 0, swipeT = 0;
+        // Swipe handlers read + write via swipeRef (component-scope) so a
+        // re-render mid-gesture doesn't lose the touchstart origin.
         const onTouchStart = (e: React.TouchEvent) => {
           const t = e.touches[0];
           if (!t) return;
-          swipeX = t.clientX; swipeY = t.clientY; swipeT = Date.now();
+          swipeRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
         };
         const onTouchEnd = (e: React.TouchEvent) => {
           const t = e.changedTouches[0];
           if (!t) return;
-          const dx = t.clientX - swipeX;
-          const dy = t.clientY - swipeY;
-          const dt = Date.now() - swipeT;
+          const { x, y, t: startT } = swipeRef.current;
+          const dx = t.clientX - x;
+          const dy = t.clientY - y;
+          const dt = Date.now() - startT;
           // Horizontal swipe only: needs to travel ≥ 40px, be faster than
           // 600ms, and be clearly more horizontal than vertical (so
           // vertical scrolls don't accidentally flip cards).
@@ -671,10 +675,20 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
           if (Math.abs(dx) < Math.abs(dy) * 1.5) return;
           stepModal(dx > 0 ? -1 : 1);
         };
-        const openPermalink = (e: React.MouseEvent) => {
+        // Close the modal then navigate via ClientRouter so we keep the
+        // hex view-transition into the permalink. Falls back to a hard
+        // navigation when the module isn't available (dev without
+        // transitions, missing import map, etc.).
+        const openPermalink = async (e: React.MouseEvent) => {
           e.preventDefault();
+          const target = permalinkUrl(modalMeme.slug);
           setModalSlug(null);
-          window.location.href = permalinkUrl(modalMeme.slug);
+          try {
+            const mod = await import('astro:transitions/client');
+            mod.navigate(target);
+          } catch {
+            window.location.href = target;
+          }
         };
         return (
           <div
@@ -962,14 +976,16 @@ export function PermalinkReactions({ slug }: { slug: string }) {
   const [offline, setOffline] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     try {
       const favs = JSON.parse(localStorage.getItem(FAVS_KEY) ?? '[]') as string[];
-      setLiked(favs.includes(slug));
+      if (!cancelled) setLiked(favs.includes(slug));
     } catch { /* ignore */ }
     fetch(apiUrl('/api/reactions'))
       .then((r) => (r.ok ? (r.json() as Promise<ReactionsMap>) : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((map) => { setCounts(map[slug] ?? EMPTY_REACTIONS); })
-      .catch(() => setOffline(true));
+      .then((map) => { if (!cancelled) setCounts(map[slug] ?? EMPTY_REACTIONS); })
+      .catch(() => { if (!cancelled) setOffline(true); });
+    return () => { cancelled = true; };
   }, [slug]);
 
   const toggleFav = () => {
