@@ -93,6 +93,7 @@ const MAX_SCALE = 5;
 
 export default function Constellation({ manifestUrl = '/manifest.json' }: Props) {
   const [manifest, setManifest] = useState<Manifest | null>(null);
+  const [fetchFailed, setFetchFailed] = useState(false);
   const [hoverTag, setHoverTag] = useState<string | null>(null);
   const [transformed, setTransformed] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -110,7 +111,15 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
   const markDirtyRef = useRef<() => void>(() => {});
 
   useEffect(() => {
-    fetch(manifestUrl).then((r) => r.json() as Promise<Manifest>).then(setManifest).catch(() => {});
+    let cancelled = false;
+    fetch(manifestUrl)
+      .then((r) => {
+        if (!r.ok) throw new Error(`manifest fetch failed: ${r.status}`);
+        return r.json() as Promise<Manifest>;
+      })
+      .then((m) => { if (!cancelled) setManifest(m); })
+      .catch(() => { if (!cancelled) setFetchFailed(true); });
+    return () => { cancelled = true; };
   }, [manifestUrl]);
 
   // Build graph once manifest arrives: nodes = tags (sized by meme count),
@@ -293,8 +302,13 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     };
     canvas.addEventListener('wheel', onWheel, { passive: false });
 
+    let capturedPointerId: number | null = null;
     const onPointerDown = (ev: PointerEvent) => {
       const d = dragRef.current;
+      // Ignore reentrant pointerdown (e.g. a second finger on touch
+      // devices) — without this, the second pointer overwrites the drag
+      // anchors and the view jumps unpredictably during multi-touch.
+      if (d.active) return;
       d.active = true;
       d.moved = false;
       d.startX = ev.clientX;
@@ -302,6 +316,7 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
       d.origTx = viewRef.current.tx;
       d.origTy = viewRef.current.ty;
       canvas!.setPointerCapture(ev.pointerId);
+      capturedPointerId = ev.pointerId;
       canvas!.style.cursor = 'grabbing';
       // Pointer capture suppresses onPointerLeave for the duration of the
       // drag, so explicitly drop any hover state when a pan begins — the
@@ -310,7 +325,10 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     };
     const onPointerMoveNative = (ev: PointerEvent) => {
       const d = dragRef.current;
-      if (!d.active) return;
+      // Only honor moves from the captured pointer. Without this, a second
+      // finger on a touch device would feed stray coordinates into the drag
+      // math and jitter the view.
+      if (!d.active || ev.pointerId !== capturedPointerId) return;
       const dx = ev.clientX - d.startX;
       const dy = ev.clientY - d.startY;
       if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.moved = true;
@@ -322,20 +340,36 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     };
     const onPointerUp = (ev: PointerEvent) => {
       const d = dragRef.current;
-      if (!d.active) return;
+      if (!d.active || ev.pointerId !== capturedPointerId) return;
       d.active = false;
       try { canvas!.releasePointerCapture(ev.pointerId); } catch { /* already released */ }
+      capturedPointerId = null;
+      canvas!.style.cursor = 'grab';
+    };
+    // If the user alt-tabs or releases the mouse in another window,
+    // pointerup may never fire here. Reset on blur so the next interaction
+    // isn't silently swallowed by a stuck drag state.
+    const onBlur = () => {
+      const d = dragRef.current;
+      if (!d.active) return;
+      d.active = false;
+      if (capturedPointerId !== null) {
+        try { canvas!.releasePointerCapture(capturedPointerId); } catch { /* ignore */ }
+        capturedPointerId = null;
+      }
       canvas!.style.cursor = 'grab';
     };
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMoveNative);
     canvas.addEventListener('pointerup', onPointerUp);
     canvas.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('blur', onBlur);
     canvas.style.cursor = 'grab';
 
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', resize);
+      window.removeEventListener('blur', onBlur);
       canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMoveNative);
@@ -421,7 +455,13 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
         onClick={onClick}
       />
       {transformed && (
-        <button type="button" className="constellation-reset" onClick={resetView} title="Reset zoom + pan">
+        <button
+          type="button"
+          className="constellation-reset"
+          onClick={resetView}
+          aria-label="Reset constellation zoom and pan"
+          title="Reset zoom + pan"
+        >
           reset view
         </button>
       )}
@@ -433,6 +473,9 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
       )}
       {nodes.length === 0 && manifest && (
         <p className="constellation-empty">archive too small for a constellation yet</p>
+      )}
+      {fetchFailed && !manifest && (
+        <p className="constellation-empty">couldn't load the tag manifest — try refreshing</p>
       )}
     </div>
   );
