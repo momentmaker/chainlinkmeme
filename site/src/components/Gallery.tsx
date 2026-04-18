@@ -108,13 +108,14 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     return counts;
   }, [manifest]);
 
-  // Autocomplete suggestions based on the last whitespace-separated token in
-  // the query — lets users keep typing multi-tag queries and still get hints
-  // on the token they're building.
+  // Autocomplete suggestions based on the last token in the query. Tokeniser
+  // matches lib/search.ts (`/[\s,]+/`) so typing `sergey,moo` still offers
+  // suggestions for `moo…` instead of failing silently.
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const TOKEN_SEP = /[\s,]+/;
   const suggestions = useMemo(() => {
     if (!manifest || !showSuggestions) return [] as Array<[string, number]>;
-    const tokens = query.split(/\s+/);
+    const tokens = query.split(TOKEN_SEP);
     const active = tokens[tokens.length - 1]?.toLowerCase() ?? '';
     if (!active) return [];
     const all = Object.entries(tagCounts);
@@ -125,9 +126,11 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   }, [manifest, tagCounts, query, showSuggestions]);
 
   const applySuggestion = useCallback((tag: string) => {
-    const tokens = query.split(/\s+/);
-    tokens[tokens.length - 1] = tag;
-    setQuery(tokens.join(' '));
+    // Replace the last token (the one the user is typing) with the chosen
+    // tag. Preserves prior tokens so multi-tag queries keep working.
+    const match = query.match(/^(.*?)([^\s,]*)$/);
+    const prefix = match ? match[1] : '';
+    setQuery(`${prefix}${tag}`);
     setShowSuggestions(false);
     searchRef.current?.focus();
   }, [query]);
@@ -186,58 +189,6 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     );
   }, []);
 
-  const onKey = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement && e.key !== 'Escape') return;
-      if (modalSlug) {
-        if (e.key === 'Escape') { setModalSlug(null); return; }
-        if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'j') { stepModal(1); return; }
-        if (e.key === 'ArrowLeft' || e.key === 'h' || e.key === 'k') { stepModal(-1); return; }
-        if (e.key === 'c' && modalMeme) { copyPermalink(modalMeme.slug); return; }
-        if (e.key === 'f' && modalMeme) {
-          toggleFavorite(modalMeme.slug);
-          if (!favorites.has(modalMeme.slug)) incrementLike(modalMeme.slug);
-          return;
-        }
-        return;
-      }
-      if (showHelp) {
-        if (e.key === 'Escape' || e.key === '?') setShowHelp(false);
-        return;
-      }
-      if (e.key === '/') { e.preventDefault(); searchRef.current?.focus(); return; }
-      if (e.key === '?') { e.preventDefault(); setShowHelp(true); return; }
-      if (e.key === 'Escape') { searchRef.current?.blur(); setFocused(-1); return; }
-      if (e.key === 'r' && manifest) {
-        const pool = queryActive ? filtered : manifest.memes;
-        if (pool.length > 0) setModalSlug(pool[Math.floor(Math.random() * pool.length)].slug);
-        return;
-      }
-      if (e.key === 'j') {
-        setFocused((f) => Math.min(visible.length - 1, f + 1));
-        return;
-      }
-      if (e.key === 'k') {
-        setFocused((f) => Math.max(0, f - 1));
-        return;
-      }
-      const current = focused >= 0 ? visible[focused] : null;
-      if (!current) return;
-      if (e.key === 'f') { toggleFavorite(current.slug); incrementLike(current.slug); }
-      if (e.key === 'c') copyPermalink(current.slug);
-      if (e.key === 'Enter') setModalSlug(current.slug);
-    },
-    [modalSlug, showHelp, visible, focused, toggleFavorite, copyPermalink, incrementLike],
-  );
-
-  useEffect(() => {
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onKey]);
-  // Intentional: stepModal / copyPermalink / favorites / etc. referenced inside
-  // onKey are already deps of the useCallback above; suppressing the eslint
-  // noise isn't worth a custom config file for this size of project.
-
   // Carousel scope for modal arrow-key navigation. When a query is active the
   // carousel only steps through matches; otherwise it walks the whole archive
   // in manifest order.
@@ -263,6 +214,62 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     setModalSlug(carouselList[next].slug);
   }, [modalIndex, carouselList]);
 
+  const onKey = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement && e.key !== 'Escape') return;
+      if (modalSlug) {
+        if (e.key === 'Escape') { setModalSlug(null); return; }
+        if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'j') { stepModal(1); return; }
+        if (e.key === 'ArrowLeft' || e.key === 'h' || e.key === 'k') { stepModal(-1); return; }
+        if (e.key === 'c' && modalMeme) { copyPermalink(modalMeme.slug); return; }
+        if (e.key === 'f' && modalMeme) {
+          toggleFavorite(modalMeme.slug);
+          if (!favorites.has(modalMeme.slug)) incrementLike(modalMeme.slug);
+          return;
+        }
+        return;
+      }
+      // While the help dialog is open, the only keys we respond to are Esc
+      // and `?` (both close it). Everything else is swallowed so focus nav
+      // can't move invisibly behind the overlay.
+      if (showHelp) {
+        if (e.key === 'Escape' || e.key === '?') setShowHelp(false);
+        return;
+      }
+      if (e.key === '/') { e.preventDefault(); searchRef.current?.focus(); return; }
+      if (e.key === '?') { e.preventDefault(); setShowHelp(true); return; }
+      if (e.key === 'Escape') { searchRef.current?.blur(); setFocused(-1); return; }
+      if (e.key === 'r' && manifest) {
+        const pool = queryActive ? filtered : manifest.memes;
+        if (pool.length > 0) setModalSlug(pool[Math.floor(Math.random() * pool.length)].slug);
+        return;
+      }
+      if (e.key === 'j') {
+        setFocused((f) => Math.min(visible.length - 1, f + 1));
+        return;
+      }
+      if (e.key === 'k') {
+        setFocused((f) => Math.max(0, f - 1));
+        return;
+      }
+      const current = focused >= 0 ? visible[focused] : null;
+      if (!current) return;
+      if (e.key === 'f') { toggleFavorite(current.slug); incrementLike(current.slug); return; }
+      if (e.key === 'c') { copyPermalink(current.slug); return; }
+      if (e.key === 'Enter') { setModalSlug(current.slug); return; }
+    },
+    [
+      modalSlug, modalMeme, showHelp, manifest, filtered, queryActive,
+      visible, focused, favorites, stepModal,
+      toggleFavorite, copyPermalink, incrementLike,
+    ],
+  );
+
+  useEffect(() => {
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onKey]);
+
   // Infinite scroll: observe a sentinel near the footer and bump the page as
   // it enters the viewport. Only active when no query is set — spotlight mode
   // already shows a large set, and pagination would feel wrong there.
@@ -282,6 +289,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     io.observe(el);
     return () => io.disconnect();
   }, [queryActive, manifest, filtered.length, pageSize]);
+
 
   return (
     <>
@@ -388,10 +396,10 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
         >?</button>
       </div>
 
-      {queryActive && (
+      {queryActive && manifest && (
         <div className="match-count">
           <strong>{filtered.length}</strong> match{filtered.length === 1 ? '' : 'es'}
-          {filtered.length < manifest!.memes.length && (
+          {filtered.length < manifest.memes.length && (
             <> · non-matches dimmed for context</>
           )}
         </div>
@@ -508,7 +516,7 @@ function Card({ meme, index, focused, lit, dim, liked, likeCount, innerRef, onOp
       data-focused={focused || undefined}
       data-lit={lit || undefined}
       data-dim={dim || undefined}
-      style={{ ['--card-i' as string]: Math.min(index, 30) }}
+      style={{ '--card-i': Math.min(index, 30) } as React.CSSProperties}
       role="listitem"
     >
       <a href={permalinkUrl(meme.slug)} onClick={(e) => { e.preventDefault(); onOpenModal(); }}>

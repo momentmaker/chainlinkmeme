@@ -38,7 +38,7 @@ const fullOg = ogImage ?? null;
     <meta property="og:url" content={fullCanonical} />
     <meta property="og:type" content="website" />
 
-    <meta name={fullOg ? 'twitter:card' : 'twitter:card'} content={fullOg ? 'summary_large_image' : 'summary'} />
+    <meta name="twitter:card" content={fullOg ? 'summary_large_image' : 'summary'} />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     {fullOg && <meta name="twitter:image" content={fullOg} />}

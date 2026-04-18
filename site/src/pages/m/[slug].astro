@@ -22,8 +22,8 @@ const related = manifest.memes
 
 // Legacy imports inherit the md5-hex filename as a placeholder title. If the
 // title looks like one of those, prefer the first tag (mirrors the OG card).
-const looksLikeHash = /^[0-9a-f]{10,}$/i.test(meme.title || meme.slug);
-const displayTitle = meme.title && !/^[0-9a-f]{10,}$/i.test(meme.title)
+const HASH_RE = /^[0-9a-f]{10,}$/i;
+const displayTitle = meme.title && !HASH_RE.test(meme.title)
   ? meme.title
   : (meme.tags[0] ? `#${meme.tags[0]}` : 'chainlink meme');
 
@@ -39,8 +39,8 @@ const ogImage = `${siteUrl}/og/${meme.slug}.png`;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 <Base
-  title={meme.title ? `${meme.title} — chainlink meme` : `${meme.slug} — chainlink meme`}
-  description={meme.description || `${meme.tags.join(', ')} — chainlink meme`}
+  title={`${displayTitle} — chainlink meme`}
+  description={meme.description || `${meme.tags.map((t) => '#' + t).join(' ')} — chainlink meme`}
   ogImage={ogImage}
 >
   <ThemeToggle client:load slot="header-actions" />
@@ -60,12 +60,15 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
           <a href={`${base}/?q=${encodeURIComponent(t)}`} class="tag-chip">#{t}</a>
         ))}
       </div>
-      {(meme.credit || meme.submitted_by) && (
+      {(meme.credit || meme.submitted_by || meme.source_url) && (
         <p class="permalink-credit">
           {meme.credit && <>credit: {meme.credit}</>}
-          {meme.credit && meme.submitted_by && ' · '}
-          {meme.submitted_by && <>submitted by <a href={`https://github.com/${meme.submitted_by.replace(/^@/, '')}`}>{meme.submitted_by}</a></>}
-          {meme.source_url && <> · <a href={meme.source_url} rel="noopener">source</a></>}
+          {meme.credit && (meme.submitted_by || meme.source_url) && ' · '}
+          {meme.submitted_by && (
+            <>submitted by <a href={`https://github.com/${meme.submitted_by.replace(/^@/, '')}`}>{meme.submitted_by}</a></>
+          )}
+          {meme.submitted_by && meme.source_url && ' · '}
+          {meme.source_url && <a href={meme.source_url} rel="noopener">source</a>}
         </p>
       )}
       <div class="permalink-actions">

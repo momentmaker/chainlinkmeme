@@ -14,6 +14,13 @@ const mod = memeOfDay(manifest.memes);
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const manifestHref = `${base}/manifest.json`;
 
+// Same title-fallback the permalink + OG use: md5-looking legacy filenames
+// get replaced with #firsttag so nobody sees a 32-hex string as UI copy.
+const HASH_RE = /^[0-9a-f]{10,}$/i;
+const heroTitle = mod
+  ? (mod.title && !HASH_RE.test(mod.title) ? mod.title : (mod.tags[0] ? `#${mod.tags[0]}` : 'meme of the day'))
+  : '';
+
 // Stats strip — computed at build time, shown once in the footer.
 // "last built" reflects the manifest generation time (≈ last deploy). Using
 // date_added maxima is misleading here because every legacy meme shares the
@@ -38,10 +45,18 @@ const stats = {
 
   {mod && (
     <a href={permalinkUrl(mod.slug)} class="hero" style="text-decoration: none; color: white;">
-      <img class="hero-img" src={memeUrl(mod.filename)} alt={mod.title || mod.slug} />
+      <img
+        class="hero-img"
+        src={memeUrl(mod.filename)}
+        alt={heroTitle}
+        width={mod.width || 160}
+        height={mod.height || 160}
+        loading="eager"
+        decoding="async"
+      />
       <div>
         <div class="hero-label">⬢ meme of the day</div>
-        <div class="hero-title">{mod.title || mod.slug}</div>
+        <div class="hero-title">{heroTitle}</div>
         <div style="font-size: 12px; opacity: 0.8;">
           {mod.tags.slice(0, 6).join(' · ')}
         </div>

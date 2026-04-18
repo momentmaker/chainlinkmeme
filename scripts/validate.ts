@@ -40,14 +40,23 @@ function main() {
     if (!e.image || !e.toml) continue;
 
     const raw = fs.readFileSync(path.join(MEMES_DIR, e.toml), 'utf8');
-    let meta: any;
-    try { meta = parseToml(raw); } catch (err) { errors.push(`${base}: invalid TOML — ${(err as Error).message}`); continue; }
+    // smol-toml's `parse` returns a loosely-typed record; we type-guard each
+    // field below rather than trust a `Meta` interface, because the whole
+    // point of validate.ts is to catch contributions with the wrong shapes.
+    let meta: Record<string, unknown>;
+    try {
+      meta = parseToml(raw) as Record<string, unknown>;
+    } catch (err) {
+      errors.push(`${base}: invalid TOML — ${(err as Error).message}`);
+      continue;
+    }
 
-    if (!Array.isArray(meta.tags) || meta.tags.length === 0) {
+    const metaTags = meta.tags;
+    if (!Array.isArray(metaTags) || metaTags.length === 0) {
       errors.push(`${base}: tags must be a non-empty array`);
     } else {
-      for (const t of meta.tags) {
-        if (typeof t !== 'string') { errors.push(`${base}: tag is not a string: ${t}`); continue; }
+      for (const t of metaTags) {
+        if (typeof t !== 'string') { errors.push(`${base}: tag is not a string: ${String(t)}`); continue; }
         if (!vocabSet.has(t)) errors.push(`${base}: tag "${t}" not in _vocab.toml`);
       }
     }
@@ -59,15 +68,16 @@ function main() {
     // in CONTRIBUTING.md, but legacy imports up to 10 MB are grandfathered.
     if (stat.size > 10 * 1024 * 1024) errors.push(`${base}: image exceeds 10 MB — please compress`);
 
-    for (const field of ['title', 'description', 'credit', 'source_url', 'submitted_by']) {
-      if (meta[field] !== undefined && typeof meta[field] !== 'string') {
+    for (const field of ['title', 'description', 'credit', 'source_url', 'submitted_by'] as const) {
+      const v = meta[field];
+      if (v !== undefined && typeof v !== 'string') {
         errors.push(`${base}: ${field} must be a string (or omitted)`);
       }
     }
     if (meta.nsfw !== undefined && typeof meta.nsfw !== 'boolean') {
       errors.push(`${base}: nsfw must be boolean`);
     }
-    if (meta.title && typeof meta.title === 'string' && meta.title.length > 80) {
+    if (typeof meta.title === 'string' && meta.title.length > 80) {
       errors.push(`${base}: title exceeds 80 chars`);
     }
   }
