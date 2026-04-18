@@ -178,11 +178,19 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   // property: this is append-only — adding cards at the end never reshuffles
   // earlier cards. CSS column-count would rebalance on every grow, which is
   // exactly what made scrolling back up feel "random" before.
+  //
+  // Aspect is clamped to match the CSS max-height cap on card images —
+  // otherwise a single ultra-tall image "owns" a column and leaves a large
+  // empty gap in adjacent columns until many unit-height cards catch up.
+  // Only applied when multi-column; the 1-column mobile layout keeps images
+  // uncropped so text-heavy screenshots stay readable.
   const columns = useMemo(() => {
     const cols: MemeEntry[][] = Array.from({ length: columnCount }, () => []);
     const heights = new Array<number>(columnCount).fill(0);
+    const maxAspect = columnCount > 1 ? 2 : Infinity;
     for (const m of visible) {
-      const aspect = m.width > 0 && m.height > 0 ? m.height / m.width : 1;
+      const rawAspect = m.width > 0 && m.height > 0 ? m.height / m.width : 1;
+      const aspect = Math.min(rawAspect, maxAspect);
       let shortest = 0;
       for (let i = 1; i < columnCount; i++) if (heights[i] < heights[shortest]) shortest = i;
       cols[shortest].push(m);
@@ -570,7 +578,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
           No memes match. Try a different tag or clear filters.
         </p>
       ) : (
-        <div className="gallery" role="list">
+        <div className="gallery" role="list" data-cols={columnCount}>
           {columns.map((col, ci) => (
             <div key={ci} className="gallery-column">
               {col.map((m) => {

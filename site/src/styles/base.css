@@ -292,6 +292,16 @@ a:hover { text-decoration: underline; }
   height: auto;
   background: #f4f4f4;
 }
+/* In multi-column gallery, cap displayed card-image height so ultra-tall
+   memes don't dominate a column and leave adjacent columns with large gaps.
+   The full image is always reachable through the modal (click the card). On
+   mobile's 1-column layout we skip the cap so text-heavy screenshots stay
+   legible without needing a tap. */
+.gallery:has(.gallery-column):not([data-cols="1"]) .card img {
+  max-height: 60vh;
+  object-fit: cover;
+  object-position: center top;
+}
 
 .card-overlay {
   position: absolute;
