@@ -530,7 +530,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
           onClick={() => setFavoritesOnly((v) => { track('filter-favorites', { on: !v }); return !v; })}
           disabled={favorites.size === 0}
         >
-          <span className="hex" aria-hidden="true">♥</span> Favorites · {favorites.size}
+          <span className="hex" aria-hidden="true">{'\u2764\ufe0f'}</span> Favorites · {favorites.size}
         </button>
         <button
           type="button"
