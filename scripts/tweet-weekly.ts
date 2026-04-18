@@ -32,8 +32,8 @@ function latestWeeklySnapshot(): WeeklySnapshot | null {
   return JSON.parse(fs.readFileSync(path.join(WEEKLY_DIR, latest), 'utf8')) as WeeklySnapshot;
 }
 
-function buildOpener(snap: WeeklySnapshot): string {
-  return `⬢ last week on the archive (${snap.start} — ${snap.end})\nthe ${snap.top.length} most reacted memes 🧵`;
+function buildOpener(snap: WeeklySnapshot, count: number): string {
+  return `⬢ last week on the archive (${snap.start} — ${snap.end})\nthe ${count} most reacted memes 🧵`;
 }
 
 function buildReply(rank: number, total: number, meme: MemeEntry, entry: WeeklyTopEntry): string {
@@ -64,17 +64,24 @@ async function main() {
   const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8')) as Manifest;
   const bySlug = new Map(manifest.memes.map((m) => [m.slug, m]));
 
-  const opener = buildOpener(snap);
-  const replies: string[] = [];
-  for (let i = 0; i < snap.top.length; i++) {
-    const entry = snap.top[i]!;
-    const meme = bySlug.get(entry.slug);
-    if (!meme) {
-      console.warn(`[tweet-weekly] skipping ${entry.slug} — not in current manifest`);
-      continue;
-    }
-    replies.push(buildReply(i + 1, snap.top.length, meme, entry));
+  // Drop any snapshot entry whose meme was removed from the archive between
+  // snapshot time and now. Filter *before* numbering so the thread reads as
+  // a clean "1/6, 2/6 … 6/6" rather than an alarming "1/7, 2/7, 5/7 …".
+  const validEntries = snap.top.filter((e) => bySlug.has(e.slug));
+  if (validEntries.length === 0) {
+    console.log(`[tweet-weekly] ${snap.week}: every top entry is missing from the current manifest — skipping`);
+    return;
   }
+  if (validEntries.length < snap.top.length) {
+    const dropped = snap.top.filter((e) => !bySlug.has(e.slug)).map((e) => e.slug);
+    console.warn(`[tweet-weekly] dropped ${dropped.length} entries missing from manifest: ${dropped.join(', ')}`);
+  }
+
+  const opener = buildOpener(snap, validEntries.length);
+  const replies = validEntries.map((entry, i) => {
+    const meme = bySlug.get(entry.slug)!;
+    return buildReply(i + 1, validEntries.length, meme, entry);
+  });
 
   console.log(`[tweet-weekly] ${snap.week} — opener + ${replies.length} replies`);
   console.log(`[tweet-weekly] opener:\n${opener}`);

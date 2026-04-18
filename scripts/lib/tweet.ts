@@ -30,7 +30,10 @@ const HASH_RE = /^[0-9a-f]{10,}$/i;
 export function titleOrTag(meme: Pick<MemeEntry, 'title' | 'tags' | 'slug'>): string {
   if (meme.title && !HASH_RE.test(meme.title)) return meme.title;
   if (meme.tags[0]) return `#${meme.tags[0]}`;
-  return meme.slug.slice(0, 10);
+  // Shouldn't reach here — every meme is required to have ≥1 tag by the
+  // validate script — but keep a legible fallback rather than posting a
+  // raw hex slug fragment if a schema drift ever slips past CI.
+  return '#unknown';
 }
 
 // GIFs upload as native GIF media with tweet_gif category so X auto-plays
