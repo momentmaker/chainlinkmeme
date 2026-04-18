@@ -35,7 +35,13 @@ const prev = idx > 0 ? memes[idx - 1] : null;
 const next = idx >= 0 && idx < memes.length - 1 ? memes[idx + 1] : null;
 
 const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://chainlinkme.me';
-const ogImage = `${siteUrl}/og/${meme.slug}.png`;
+// For animated memes (GIFs), unfurl the raw file so Discord/Telegram/
+// WhatsApp preview it moving — the Satori-rendered PNG card kills
+// animation. Static images keep the branded card. memeUrl() already
+// returns a fully-qualified jsDelivr URL in prod.
+const ogImage = meme.animated
+  ? memeUrl(meme.filename)
+  : `${siteUrl}/og/${meme.slug}.png`;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 <Base

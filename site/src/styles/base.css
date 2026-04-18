@@ -305,7 +305,7 @@ a:hover { text-decoration: underline; }
 .card:hover .card-overlay,
 .card.focused .card-overlay { opacity: 1; }
 
-.like-btn, .tag-btn {
+.like-btn, .tag-btn, .reaction-btn {
   background: rgba(255,255,255,0.95);
   border: none;
   border-radius: 999px;
@@ -317,10 +317,40 @@ a:hover { text-decoration: underline; }
   display: inline-flex;
   gap: 4px;
   align-items: center;
+  font-family: inherit;
 }
-.like-btn:hover, .tag-btn:hover { background: white; }
+.like-btn:hover, .tag-btn:hover, .reaction-btn:hover { background: white; transform: scale(1.08); }
 .like-btn.liked { color: var(--accent-red); }
 .like-btn.liked .heart { color: var(--accent-red); }
+
+/* Multi-reaction row — heart, laugh, bolt, diamond. Sits on the card overlay
+   alongside the permalink pill. Each button is small, tap-sized, animates
+   on tap to reinforce the satisfaction of voting. */
+.reaction-row {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.reaction-btn {
+  padding: 4px 8px;
+  transition: transform 0.12s ease, background 0.15s ease;
+}
+.reaction-btn:active { transform: scale(0.92); }
+.reaction-btn.liked { color: var(--accent-red); }
+.reaction-btn.liked .reaction-icon { color: var(--accent-red); }
+.reaction-icon { font-size: 12px; line-height: 1; }
+.reaction-count { font-variant-numeric: tabular-nums; }
+.reaction-total {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: white;
+  opacity: 0.85;
+  background: rgba(47, 98, 223, 0.6);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+}
 
 .hero {
   position: relative;

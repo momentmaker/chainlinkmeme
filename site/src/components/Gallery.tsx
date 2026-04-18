@@ -11,7 +11,23 @@ interface Props {
 const FAVS_KEY = 'chainlinkmeme:favorites';
 const THEME_KEY = 'chainlinkmeme:theme';
 
-type Likes = Record<string, number>;
+const REACTIONS = ['heart', 'laugh', 'bolt', 'diamond'] as const;
+type Reaction = typeof REACTIONS[number];
+const REACTION_ICON: Record<Reaction, string> = {
+  heart: '♥',
+  laugh: '😂',
+  bolt: '⚡',
+  diamond: '💎',
+};
+const REACTION_LABEL: Record<Reaction, string> = {
+  heart: 'heart',
+  laugh: 'laugh',
+  bolt: 'bolt',
+  diamond: 'diamond',
+};
+type ReactionCounts = Record<Reaction, number>;
+type ReactionsMap = Record<string, ReactionCounts>;
+function emptyReactions(): ReactionCounts { return { heart: 0, laugh: 0, bolt: 0, diamond: 0 }; }
 
 // Umami custom-event helper — fire-and-forget. Wrapped so the rest of the
 // code can call `track('x')` without null-checking window.umami at every site.
@@ -61,7 +77,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   const [modalSlug, setModalSlug] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
-  const [likes, setLikes] = useState<Likes>({});
+  const [reactions, setReactions] = useState<ReactionsMap>({});
   const searchRef = useRef<HTMLInputElement>(null);
   const focusedCardRef = useRef<HTMLDivElement>(null);
 
@@ -117,9 +133,9 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   }, [query, animatedOnly, favoritesOnly]);
 
   useEffect(() => {
-    fetch(apiUrl('/api/likes'))
-      .then((r) => (r.ok ? (r.json() as Promise<Likes>) : {}))
-      .then(setLikes)
+    fetch(apiUrl('/api/reactions'))
+      .then((r) => (r.ok ? (r.json() as Promise<ReactionsMap>) : {} as ReactionsMap))
+      .then(setReactions)
       .catch(() => {});
   }, []);
 
@@ -196,16 +212,21 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     track('search-suggestion', { tag });
   }, [query]);
 
-  // Top 8 most-liked memes, hidden until the archive has real community votes.
+  // Top 8 most-reacted memes by total across all reactions. Hidden until
+  // the archive has real community votes.
   const popular = useMemo(() => {
     if (!manifest) return [] as MemeEntry[];
     return manifest.memes
-      .map((m) => ({ m, c: likes[m.slug] ?? 0 }))
+      .map((m) => {
+        const rs = reactions[m.slug];
+        const c = rs ? rs.heart + rs.laugh + rs.bolt + rs.diamond : 0;
+        return { m, c };
+      })
       .filter(({ c }) => c > 0)
       .sort((a, b) => b.c - a.c)
       .slice(0, 8)
       .map(({ m }) => m);
-  }, [manifest, likes]);
+  }, [manifest, reactions]);
 
   useEffect(() => {
     if (toast) {
@@ -230,16 +251,24 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     });
   }, []);
 
-  const incrementLike = useCallback(async (slug: string) => {
+  const incrementReaction = useCallback(async (slug: string, reaction: Reaction) => {
+    // Optimistic bump — the server round-trip won't keep up with rapid taps,
+    // and because reactions are strictly monotonic no reconciliation matters
+    // beyond "eventually the real count wins".
+    setReactions((prev) => {
+      const prior = prev[slug] ?? emptyReactions();
+      return { ...prev, [slug]: { ...prior, [reaction]: (prior[reaction] ?? 0) + 1 } };
+    });
     try {
-      const res = await fetch(apiUrl(`/api/likes/${encodeURIComponent(slug)}`), { method: 'POST' });
+      const res = await fetch(apiUrl(`/api/reactions/${encodeURIComponent(slug)}/${reaction}`), { method: 'POST' });
       if (res.ok) {
         const body = (await res.json()) as { count: number };
-        setLikes((prev) => ({ ...prev, [slug]: body.count }));
+        setReactions((prev) => {
+          const prior = prev[slug] ?? emptyReactions();
+          return { ...prev, [slug]: { ...prior, [reaction]: body.count } };
+        });
       }
-    } catch {
-      /* silent */
-    }
+    } catch { /* silent */ }
   }, []);
 
   const copyPermalink = useCallback((slug: string) => {
@@ -318,7 +347,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
         if (e.key === 'c' && modalMeme) { copyPermalink(modalMeme.slug); return; }
         if (e.key === 'f' && modalMeme) {
           toggleFavorite(modalMeme.slug);
-          if (!favorites.has(modalMeme.slug)) incrementLike(modalMeme.slug);
+          if (!favorites.has(modalMeme.slug)) incrementReaction(modalMeme.slug, 'heart');
           return;
         }
         return;
@@ -348,14 +377,14 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
       }
       const current = focused >= 0 ? visible[focused] : null;
       if (!current) return;
-      if (e.key === 'f') { toggleFavorite(current.slug); incrementLike(current.slug); return; }
+      if (e.key === 'f') { toggleFavorite(current.slug); incrementReaction(current.slug, 'heart'); return; }
       if (e.key === 'c') { copyPermalink(current.slug); return; }
       if (e.key === 'Enter') { setModalSlug(current.slug); return; }
     },
     [
       modalSlug, modalMeme, showHelp, manifest, filtered, queryActive,
       visible, focused, favorites, stepModal,
-      toggleFavorite, copyPermalink, incrementLike,
+      toggleFavorite, copyPermalink, incrementReaction,
     ],
   );
 
@@ -406,7 +435,9 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
                 aria-label={`Open ${m.title || m.slug}`}
               >
                 <img src={memeUrl(m.filename)} alt={m.title || m.slug} loading="lazy" />
-                <span className="popular-badge">♥ {likes[m.slug]}</span>
+                <span className="popular-badge">
+                  ⚡ {reactions[m.slug] ? (reactions[m.slug].heart + reactions[m.slug].laugh + reactions[m.slug].bolt + reactions[m.slug].diamond) : 0}
+                </span>
               </button>
             ))}
           </div>
@@ -527,13 +558,14 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
                     lit={queryActive && matchLookup.has(m.slug)}
                     dim={queryActive && !matchLookup.has(m.slug)}
                     liked={favorites.has(m.slug)}
-                    likeCount={likes[m.slug] ?? 0}
+                    reactionCounts={reactions[m.slug] ?? emptyReactions()}
                     innerRef={i === focused ? focusedCardRef : null}
                     onOpenModal={() => setModalSlug(m.slug)}
                     onToggleFavorite={() => {
                       toggleFavorite(m.slug);
-                      if (!favorites.has(m.slug)) incrementLike(m.slug);
+                      if (!favorites.has(m.slug)) incrementReaction(m.slug, 'heart');
                     }}
+                    onReact={(rx) => incrementReaction(m.slug, rx)}
                     onCopyLink={() => copyPermalink(m.slug)}
                   />
                 );
@@ -635,14 +667,16 @@ interface CardProps {
   lit: boolean;
   dim: boolean;
   liked: boolean;
-  likeCount: number;
+  reactionCounts: ReactionCounts;
   innerRef: React.Ref<HTMLDivElement> | null;
   onOpenModal: () => void;
   onToggleFavorite: () => void;
+  onReact: (reaction: Reaction) => void;
   onCopyLink: () => void;
 }
 
-function Card({ meme, index, focused, lit, dim, liked, likeCount, innerRef, onOpenModal, onToggleFavorite, onCopyLink }: CardProps) {
+function Card({ meme, index, focused, lit, dim, liked, reactionCounts, innerRef, onOpenModal, onToggleFavorite, onReact, onCopyLink }: CardProps) {
+  const totalReactions = reactionCounts.heart + reactionCounts.laugh + reactionCounts.bolt + reactionCounts.diamond;
   return (
     <div
       ref={innerRef ?? undefined}
@@ -665,18 +699,29 @@ function Card({ meme, index, focused, lit, dim, liked, likeCount, innerRef, onOp
         />
       </a>
       <div className="card-overlay">
-        <button
-          type="button"
-          className={`like-btn ${liked ? 'liked' : ''}`}
-          onClick={onToggleFavorite}
-          aria-label={liked ? 'Unfavorite' : 'Favorite'}
-        >
-          <span className="heart" aria-hidden="true">♥</span>
-          {likeCount > 0 && <span>{likeCount}</span>}
-        </button>
-        <button type="button" className="tag-btn" onClick={onCopyLink} aria-label="Copy permalink">
+        <div className="reaction-row" role="group" aria-label="Reactions">
+          {REACTIONS.map((rx) => (
+            <button
+              key={rx}
+              type="button"
+              className={`reaction-btn ${rx === 'heart' && liked ? 'liked' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (rx === 'heart') onToggleFavorite();
+                else onReact(rx);
+              }}
+              aria-label={`React with ${REACTION_LABEL[rx]}`}
+              title={REACTION_LABEL[rx]}
+            >
+              <span className="reaction-icon" aria-hidden="true">{REACTION_ICON[rx]}</span>
+              {reactionCounts[rx] > 0 && <span className="reaction-count">{reactionCounts[rx]}</span>}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="tag-btn" onClick={(e) => { e.stopPropagation(); onCopyLink(); }} aria-label="Copy permalink">
           link
         </button>
+        {totalReactions > 0 && <span className="reaction-total" aria-hidden="true">⚡ {totalReactions}</span>}
       </div>
     </div>
   );
