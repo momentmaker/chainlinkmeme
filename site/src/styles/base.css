@@ -1028,6 +1028,23 @@ a:hover { text-decoration: underline; }
   color: var(--muted);
   font-size: 14px;
 }
+.constellation-reset {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  padding: 8px 14px;
+  background: rgba(15, 23, 42, 0.85);
+  color: rgba(255,255,255,0.9);
+  border: 1px solid rgba(47, 98, 223, 0.45);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.constellation-reset:hover { border-color: var(--brand-blue); color: white; }
 
 /* Weekly stack pages */
 .weekly, .weekly-index { max-width: 880px; margin: 0 auto; }

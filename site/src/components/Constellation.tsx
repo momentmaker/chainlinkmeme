@@ -86,9 +86,15 @@ function hexPath(ctx: CanvasRenderingContext2D, x: number, y: number, r: number)
   ctx.closePath();
 }
 
+interface View { scale: number; tx: number; ty: number; }
+const IDENTITY_VIEW: View = { scale: 1, tx: 0, ty: 0 };
+const MIN_SCALE = 0.5;
+const MAX_SCALE = 5;
+
 export default function Constellation({ manifestUrl = '/manifest.json' }: Props) {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [hoverTag, setHoverTag] = useState<string | null>(null);
+  const [transformed, setTransformed] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   // Ref mirror of hoverTag so the draw loop can pick up latest hover state
@@ -97,6 +103,11 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
   // physics sim and means the graph never settles.
   const hoverTagRef = useRef<string | null>(null);
   useEffect(() => { hoverTagRef.current = hoverTag; }, [hoverTag]);
+  // View transform + drag state live in refs so the raf loop + native
+  // wheel/pointer handlers can mutate them without tearing the effect down.
+  const viewRef = useRef<View>({ ...IDENTITY_VIEW });
+  const dragRef = useRef({ active: false, moved: false, startX: 0, startY: 0, origTx: 0, origTy: 0 });
+  const markDirtyRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     fetch(manifestUrl).then((r) => r.json() as Promise<Manifest>).then(setManifest).catch(() => {});
@@ -167,24 +178,25 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     const KE_THRESHOLD = 0.08;
     const MIN_SETTLE_ITERS = reduce ? 30 : 80;
 
+    let currentDpr = window.devicePixelRatio || 1;
     function resize() {
       const rect = wrapper!.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      canvas!.width = rect.width * dpr;
-      canvas!.height = rect.height * dpr;
+      currentDpr = window.devicePixelRatio || 1;
+      canvas!.width = rect.width * currentDpr;
+      canvas!.height = rect.height * currentDpr;
       canvas!.style.width = rect.width + 'px';
       canvas!.style.height = rect.height + 'px';
-      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
     resize();
     window.addEventListener('resize', resize);
 
     // Separate "needs redraw" signal for after the physics has settled —
-    // hover changes flip this on and the next frame picks it up without
-    // paying to re-run the force sim.
+    // hover + pan/zoom changes flip this on and the next frame picks it up
+    // without paying to re-run the force sim.
     let settled = false;
     let needsRedraw = true;
-    const hoverObserver = () => { needsRedraw = true; };
+    const markDirty = () => { needsRedraw = true; };
+    markDirtyRef.current = markDirty;
 
     function draw() {
       const rect = wrapper!.getBoundingClientRect();
@@ -207,11 +219,19 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
       }
       needsRedraw = false;
 
-      ctx!.clearRect(0, 0, w, h);
+      const v = viewRef.current;
+      // Combine DPR + view transform. Everything below draws in world
+      // coordinates; the matrix handles screen projection.
+      ctx!.setTransform(1, 0, 0, 1, 0, 0);
+      ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+      ctx!.setTransform(
+        currentDpr * v.scale, 0, 0, currentDpr * v.scale,
+        currentDpr * v.tx, currentDpr * v.ty,
+      );
       const currentHover = hoverTagRef.current;
 
-      // Edges
-      ctx!.lineWidth = 1;
+      // Edges — keep stroke width constant in screen pixels regardless of zoom.
+      ctx!.lineWidth = 1 / v.scale;
       for (const e of edges) {
         const a = nodes[e.a];
         const b = nodes[e.b];
@@ -230,15 +250,16 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
         ctx!.fillStyle = lit ? '#2f62df' : 'rgba(47, 98, 223, 0.65)';
         ctx!.fill();
         ctx!.strokeStyle = lit ? 'white' : 'rgba(255,255,255,0.25)';
-        ctx!.lineWidth = lit ? 2 : 1;
+        ctx!.lineWidth = (lit ? 2 : 1) / v.scale;
         ctx!.stroke();
 
         if (lit || n.count > maxCount * 0.2) {
           ctx!.fillStyle = lit ? 'white' : 'rgba(230, 236, 255, 0.85)';
-          ctx!.font = `${lit ? 600 : 500} ${Math.max(11, Math.min(16, n.radius * 0.7))}px -apple-system, system-ui, sans-serif`;
+          const px = Math.max(11, Math.min(16, n.radius * 0.7)) / v.scale;
+          ctx!.font = `${lit ? 600 : 500} ${px}px -apple-system, system-ui, sans-serif`;
           ctx!.textAlign = 'center';
           ctx!.textBaseline = 'middle';
-          ctx!.fillText(n.tag, n.x, n.y + n.radius + 12);
+          ctx!.fillText(n.tag, n.x, n.y + n.radius + 12 / v.scale);
         }
       }
 
@@ -246,52 +267,130 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     }
 
     raf = requestAnimationFrame(draw);
-    // Poll the hoverTag ref via a microtask loop? Simpler: dirty flag is
-    // flipped by a wrapper on the pointer handlers below via the shared
-    // closure variable. Export the flipper through the ref.
-    (wrapper as HTMLDivElement & { __markDirty?: () => void }).__markDirty = hoverObserver;
 
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
+    // Wheel-to-zoom, anchored at the cursor position so the point under the
+    // mouse stays put. preventDefault requires a non-passive listener.
+    const onWheel = (ev: WheelEvent) => {
+      ev.preventDefault();
+      const rect = canvas!.getBoundingClientRect();
+      const mx = ev.clientX - rect.left;
+      const my = ev.clientY - rect.top;
+      const v = viewRef.current;
+      const factor = Math.pow(1.0015, -ev.deltaY);
+      const next = Math.max(MIN_SCALE, Math.min(MAX_SCALE, v.scale * factor));
+      const worldX = (mx - v.tx) / v.scale;
+      const worldY = (my - v.ty) / v.scale;
+      v.scale = next;
+      v.tx = mx - worldX * next;
+      v.ty = my - worldY * next;
+      setTransformed(v.scale !== 1 || v.tx !== 0 || v.ty !== 0);
+      markDirty();
+    };
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+
+    const onPointerDown = (ev: PointerEvent) => {
+      const d = dragRef.current;
+      d.active = true;
+      d.moved = false;
+      d.startX = ev.clientX;
+      d.startY = ev.clientY;
+      d.origTx = viewRef.current.tx;
+      d.origTy = viewRef.current.ty;
+      canvas!.setPointerCapture(ev.pointerId);
+      canvas!.style.cursor = 'grabbing';
+    };
+    const onPointerMoveNative = (ev: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d.active) return;
+      const dx = ev.clientX - d.startX;
+      const dy = ev.clientY - d.startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) d.moved = true;
+      const v = viewRef.current;
+      v.tx = d.origTx + dx;
+      v.ty = d.origTy + dy;
+      setTransformed(v.scale !== 1 || v.tx !== 0 || v.ty !== 0);
+      markDirty();
+    };
+    const onPointerUp = (ev: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d.active) return;
+      d.active = false;
+      try { canvas!.releasePointerCapture(ev.pointerId); } catch { /* already released */ }
+      canvas!.style.cursor = 'grab';
+    };
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMoveNative);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointercancel', onPointerUp);
+    canvas.style.cursor = 'grab';
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', resize);
+      canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointermove', onPointerMoveNative);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointercancel', onPointerUp);
+    };
   }, [nodes, edges, maxCount]);
 
   // Flip the dirty flag on hover change so the already-running raf loop
   // picks up the new hover state. Decoupled from the raf-setup effect so
   // hovering doesn't tear down and rebuild the animation.
   useEffect(() => {
-    const wrapper = wrapperRef.current as (HTMLDivElement & { __markDirty?: () => void }) | null;
-    wrapper?.__markDirty?.();
+    markDirtyRef.current();
   }, [hoverTag]);
 
-  const onPointer = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const resetView = () => {
+    viewRef.current.scale = 1;
+    viewRef.current.tx = 0;
+    viewRef.current.ty = 0;
+    setTransformed(false);
+    markDirtyRef.current();
+  };
+
+  // Screen → world coords through the active view transform.
+  const toWorld = (clientX: number, clientY: number): { x: number; y: number } | null => {
     const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    if (!rect) return null;
+    const v = viewRef.current;
+    return {
+      x: (clientX - rect.left - v.tx) / v.scale,
+      y: (clientY - rect.top - v.ty) / v.scale,
+    };
+  };
+
+  const onPointer = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (dragRef.current.active) return;
+    const p = toWorld(e.clientX, e.clientY);
+    if (!p) return;
+    const v = viewRef.current;
+    const slop = 10 / v.scale;
     let nearest: Node | null = null;
     let bestDist = Infinity;
     for (const n of nodes) {
-      const dx = n.x - x;
-      const dy = n.y - y;
+      const dx = n.x - p.x;
+      const dy = n.y - p.y;
       const d = dx * dx + dy * dy;
-      if (d < bestDist && d < (n.radius + 10) ** 2) { bestDist = d; nearest = n; }
+      if (d < bestDist && d < (n.radius + slop) ** 2) { bestDist = d; nearest = n; }
     }
     setHoverTag(nearest?.tag ?? null);
   };
 
   const onClick = async (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Suppress the click that trailed a drag so panning doesn't navigate.
+    if (dragRef.current.moved) { dragRef.current.moved = false; return; }
+    const p = toWorld(e.clientX, e.clientY);
+    if (!p) return;
+    const v = viewRef.current;
+    const slop = 6 / v.scale;
     for (const n of nodes) {
-      const dx = n.x - x;
-      const dy = n.y - y;
-      if (dx * dx + dy * dy < (n.radius + 6) ** 2) {
+      const dx = n.x - p.x;
+      const dy = n.y - p.y;
+      if (dx * dx + dy * dy < (n.radius + slop) ** 2) {
         const base = import.meta.env.BASE_URL.replace(/\/$/, '');
         const target = `${base}/?q=${encodeURIComponent(n.tag)}`;
-        // Prefer Astro's ClientRouter navigate so we keep the hex view
-        // transition into the gallery. Fall back to a full load if the
-        // module is unavailable (dev without transitions, etc.).
         try {
           const mod = await import('astro:transitions/client');
           mod.navigate(target);
@@ -312,6 +411,11 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
         onPointerLeave={() => setHoverTag(null)}
         onClick={onClick}
       />
+      {transformed && (
+        <button type="button" className="constellation-reset" onClick={resetView} title="Reset zoom + pan">
+          reset view
+        </button>
+      )}
       {hoverTag && (
         <div className="constellation-hover">
           <strong>#{hoverTag}</strong>
