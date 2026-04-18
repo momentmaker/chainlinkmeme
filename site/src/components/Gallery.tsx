@@ -462,7 +462,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
               >
                 <img src={memeUrl(m.filename)} alt={m.title || m.slug} loading="lazy" />
                 <span className="popular-badge">
-                  ⚡ {reactions[m.slug] ? (reactions[m.slug].heart + reactions[m.slug].laugh + reactions[m.slug].bolt + reactions[m.slug].diamond) : 0}
+                  ⬢ {reactions[m.slug] ? fmtCount(reactions[m.slug].heart + reactions[m.slug].laugh + reactions[m.slug].bolt + reactions[m.slug].diamond) : 0}
                 </span>
               </button>
             ))}
@@ -758,7 +758,7 @@ function Card({ meme, index, focused, lit, dim, liked, reactionCounts, innerRef,
             </button>
           ))}
         </div>
-        {totalReactions > 0 && <span className="reaction-total" aria-hidden="true">⚡ {fmtCount(totalReactions)}</span>}
+        {totalReactions > 0 && <span className="reaction-total" aria-hidden="true" title={`${totalReactions} total reactions`}>⬢ {fmtCount(totalReactions)}</span>}
       </div>
     </div>
   );
