@@ -75,9 +75,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: site/public/og
-          key: og-v1-${{ hashFiles('memes/**/*.toml', 'scripts/build-og-images.ts', 'scripts/assets/*') }}
+          # Bump the version prefix whenever the OG card's visual design
+          # changes. `restore-keys` happily falls back to an older cache
+          # within the same version, and because the build script skips
+          # existing PNGs it'll never re-render stale designs otherwise.
+          key: og-v2-${{ hashFiles('memes/**/*.toml', 'scripts/build-og-images.ts', 'scripts/assets/*') }}
           restore-keys: |
-            og-v1-
+            og-v2-
 
       - name: Build OG images
         run: pnpm og
