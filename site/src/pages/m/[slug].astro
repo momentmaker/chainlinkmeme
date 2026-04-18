@@ -197,6 +197,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
         try {
           if (animated) {
             const res = await fetch(url, { mode: 'cors' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const blob = await res.blob();
             const obj = URL.createObjectURL(blob);
             const a = document.createElement('a');

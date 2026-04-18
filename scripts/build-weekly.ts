@@ -75,59 +75,28 @@ async function main() {
     .sort((a, b) => b.total - a.total)
     .slice(0, 7);
 
-  // Catch up any missing weeks since the last committed snapshot. GH Actions
-  // cron can miss Mondays during outages; rather than silently skip them,
-  // back-fill with the same current top-7 (the best approximation we have
-  // without per-week reaction deltas). Gapless history > correct history.
-  const existing = new Set(
-    fs.readdirSync(DATA_DIR)
-      .filter((n) => n.endsWith('.json'))
-      .map((n) => n.replace(/\.json$/, '')),
-  );
-  const weeksToWrite = enumerateMissingWeeks(existing, now);
-  if (weeksToWrite.length === 0) {
-    const current = isoWeek(now);
-    const currentKey = `${current.year}-W${String(current.week).padStart(2, '0')}`;
-    if (existing.has(currentKey) && !process.env.FORCE) {
-      console.log(`[weekly] ${currentKey} already snapshotted — skipping`);
-      return;
-    }
-    weeksToWrite.push(current);
-  }
-
-  for (const w of weeksToWrite) {
-    const weekKey = `${w.year}-W${String(w.week).padStart(2, '0')}`;
-    const outPath = path.join(DATA_DIR, `${weekKey}.json`);
-    if (fs.existsSync(outPath) && !process.env.FORCE) continue;
-    const snapshot: WeeklySnapshot = {
-      week: weekKey,
-      start: w.start.toISOString().slice(0, 10),
-      end: w.end.toISOString().slice(0, 10),
-      generated_at: now.toISOString(),
-      top: rankedAll,
-    };
-    fs.writeFileSync(outPath, JSON.stringify(snapshot, null, 2) + '\n');
-    console.log(`[weekly] wrote ${weekKey} — ${rankedAll.length} memes, top score ${rankedAll[0]?.total ?? 0}`);
-  }
-}
-
-// Returns every ISO week from the most recent committed snapshot through the
-// current week that doesn't already have a file. Caps at 8 weeks to bound
-// the cost of a long outage and so we never produce an absurd backlog.
-function enumerateMissingWeeks(existing: Set<string>, now: Date): Array<ReturnType<typeof isoWeek>> {
+  // Only ever write the current week. Back-filling earlier weeks with
+  // today's top-7 would fabricate history — if the Monday cron missed
+  // fires, we accept a real gap rather than pretend every missed week
+  // had the same winners as this week. Gaps are honest.
   const current = isoWeek(now);
-  const result: Array<ReturnType<typeof isoWeek>> = [];
-  // Walk backwards up to 8 weeks, collecting missing ones. Reverse so we
-  // write oldest → newest (makes log output read chronologically).
-  const MAX_BACKFILL = 8;
-  const cursor = new Date(current.start);
-  for (let i = 0; i < MAX_BACKFILL; i++) {
-    const w = isoWeek(cursor);
-    const key = `${w.year}-W${String(w.week).padStart(2, '0')}`;
-    if (!existing.has(key)) result.unshift(w);
-    cursor.setUTCDate(cursor.getUTCDate() - 7);
+  const weekKey = `${current.year}-W${String(current.week).padStart(2, '0')}`;
+  const outPath = path.join(DATA_DIR, `${weekKey}.json`);
+
+  if (fs.existsSync(outPath) && !process.env.FORCE) {
+    console.log(`[weekly] ${weekKey} already snapshotted — skipping`);
+    return;
   }
-  return result;
+
+  const snapshot: WeeklySnapshot = {
+    week: weekKey,
+    start: current.start.toISOString().slice(0, 10),
+    end: current.end.toISOString().slice(0, 10),
+    generated_at: now.toISOString(),
+    top: rankedAll,
+  };
+  fs.writeFileSync(outPath, JSON.stringify(snapshot, null, 2) + '\n');
+  console.log(`[weekly] wrote ${weekKey} — ${rankedAll.length} memes, top score ${rankedAll[0]?.total ?? 0}`);
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });
