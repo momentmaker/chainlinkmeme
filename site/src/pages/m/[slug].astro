@@ -1,0 +1,72 @@
+---
+import Base from '../../layouts/Base.astro';
+import { ThemeToggle } from '../../components/Gallery';
+import { memeUrl, permalinkUrl } from '../../lib/meme-url';
+import type { Manifest, MemeEntry } from '../../lib/manifest';
+import manifestJson from '../../../public/manifest.json';
+
+const manifest = manifestJson as Manifest;
+
+export async function getStaticPaths() {
+  const m = (await import('../../../public/manifest.json')) as { default: Manifest };
+  return m.default.memes.map((meme) => ({
+    params: { slug: meme.slug },
+    props: { meme },
+  }));
+}
+
+const { meme } = Astro.props as { meme: MemeEntry };
+const related = manifest.memes
+  .filter((m) => m.slug !== meme.slug && m.tags.some((t) => meme.tags.includes(t)))
+  .slice(0, 6);
+
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://chainlinkme.me';
+const ogImage = `${siteUrl}/og/${meme.slug}.png`;
+---
+<Base
+  title={meme.title ? `${meme.title} — chainlink meme` : `${meme.slug} — chainlink meme`}
+  description={meme.description || `${meme.tags.join(', ')} — chainlink meme`}
+  ogImage={ogImage}
+>
+  <ThemeToggle client:load slot="header-actions" />
+
+  <article class="permalink">
+    <img class="permalink-img" src={memeUrl(meme.filename)} alt={meme.title || meme.slug} />
+    <div class="permalink-meta">
+      <h1 class="permalink-title">{meme.title || meme.slug}</h1>
+      {meme.description && <p>{meme.description}</p>}
+      <div class="permalink-tags">
+        {meme.tags.map((t) => (
+          <a href={`/?q=${encodeURIComponent(t)}`} class="tag-chip">#{t}</a>
+        ))}
+      </div>
+      {(meme.credit || meme.submitted_by) && (
+        <p class="permalink-credit">
+          {meme.credit && <>credit: {meme.credit}</>}
+          {meme.credit && meme.submitted_by && ' · '}
+          {meme.submitted_by && <>submitted by <a href={`https://github.com/${meme.submitted_by.replace(/^@/, '')}`}>{meme.submitted_by}</a></>}
+          {meme.source_url && <> · <a href={meme.source_url} rel="noopener">source</a></>}
+        </p>
+      )}
+      <div class="permalink-actions">
+        <a class="btn" href={memeUrl(meme.filename)} download>download</a>
+        <a class="btn ghost" href="/">← back to gallery</a>
+      </div>
+    </div>
+
+    {related.length > 0 && (
+      <section style="margin-top: 40px;">
+        <h2 style="font-size: 14px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;">
+          related memes
+        </h2>
+        <div class="gallery">
+          {related.map((r) => (
+            <a href={permalinkUrl(r.slug)} class="card">
+              <img src={memeUrl(r.filename)} alt={r.title || r.slug} loading="lazy" />
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+  </article>
+</Base>

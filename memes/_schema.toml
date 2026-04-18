@@ -1,0 +1,50 @@
+# Schema for every memes/<slug>.toml file.
+# Used by scripts/validate.ts and the CI PR-validator workflow.
+# This file itself is informational; the authoritative check lives in scripts/validate.ts.
+
+[fields.tags]
+type = "string[]"
+required = true
+min_length = 1
+description = "Every tag must also appear in _vocab.toml (or be resolvable via a synonym)."
+
+[fields.title]
+type = "string"
+required = false
+max_length = 80
+description = "Short display title shown on the permalink page."
+
+[fields.description]
+type = "string"
+required = false
+max_length = 500
+description = "Optional context or lore."
+
+[fields.credit]
+type = "string"
+required = false
+max_length = 80
+description = "Original creator, if known. Free text — handle, name, or URL."
+
+[fields.source_url]
+type = "string"
+required = false
+description = "Optional origin URL."
+
+[fields.submitted_by]
+type = "string"
+required = false
+auto_filled = true
+description = "GitHub handle of the PR author. Auto-filled by CI on merge."
+
+[fields.date_added]
+type = "date"
+required = false
+auto_filled = true
+description = "Date the meme was merged (YYYY-MM-DD). Auto-filled by CI on merge."
+
+[fields.nsfw]
+type = "boolean"
+required = false
+default = false
+description = "Reserved for future moderation filtering."

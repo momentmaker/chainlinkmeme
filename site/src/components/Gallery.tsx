@@ -1,0 +1,376 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Manifest, MemeEntry } from '../lib/manifest';
+import { memeUrl, permalinkUrl } from '../lib/meme-url';
+import { filterMemes } from '../lib/search';
+
+interface Props {
+  manifestUrl?: string;
+  pageSize?: number;
+}
+
+const FAVS_KEY = 'chainlinkmeme:favorites';
+const THEME_KEY = 'chainlinkmeme:theme';
+
+type Likes = Record<string, number>;
+
+function loadFavorites(): Set<string> {
+  if (typeof localStorage === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(FAVS_KEY);
+    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveFavorites(favs: Set<string>) {
+  try {
+    localStorage.setItem(FAVS_KEY, JSON.stringify([...favs]));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 }: Props) {
+  const [manifest, setManifest] = useState<Manifest | null>(null);
+  const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites());
+  const [query, setQuery] = useState('');
+  const [animatedOnly, setAnimatedOnly] = useState(false);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [page, setPage] = useState(1);
+  const [focused, setFocused] = useState(-1);
+  const [modalSlug, setModalSlug] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [likes, setLikes] = useState<Likes>({});
+  const searchRef = useRef<HTMLInputElement>(null);
+  const focusedCardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('q');
+    if (q) setQuery(q);
+  }, []);
+
+  useEffect(() => {
+    fetch(manifestUrl)
+      .then((r) => (r.ok ? r.json() as Promise<Manifest> : null))
+      .then(setManifest)
+      .catch(() => setManifest(null));
+  }, [manifestUrl]);
+
+  const filtered = useMemo(
+    () => manifest ? filterMemes(manifest.memes, manifest, { query, animatedOnly, favoritesOnly, favorites }) : [],
+    [manifest, query, animatedOnly, favoritesOnly, favorites],
+  );
+
+  const visible = filtered.slice(0, page * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+    setFocused(-1);
+  }, [query, animatedOnly, favoritesOnly]);
+
+  useEffect(() => {
+    fetch('/api/likes')
+      .then((r) => (r.ok ? (r.json() as Promise<Likes>) : {}))
+      .then(setLikes)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (toast) {
+      const id = setTimeout(() => setToast(null), 1500);
+      return () => clearTimeout(id);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (focused >= 0 && focusedCardRef.current) {
+      focusedCardRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [focused]);
+
+  const toggleFavorite = useCallback((slug: string) => {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      saveFavorites(next);
+      return next;
+    });
+  }, []);
+
+  const incrementLike = useCallback(async (slug: string) => {
+    try {
+      const res = await fetch(`/api/likes/${encodeURIComponent(slug)}`, { method: 'POST' });
+      if (res.ok) {
+        const body = (await res.json()) as { count: number };
+        setLikes((prev) => ({ ...prev, [slug]: body.count }));
+      }
+    } catch {
+      /* silent */
+    }
+  }, []);
+
+  const copyPermalink = useCallback((slug: string) => {
+    const url = new URL(permalinkUrl(slug), window.location.origin).toString();
+    navigator.clipboard.writeText(url).then(
+      () => setToast('link copied'),
+      () => setToast('copy failed'),
+    );
+  }, []);
+
+  const onKey = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement && e.key !== 'Escape') return;
+      if (modalSlug) {
+        if (e.key === 'Escape') setModalSlug(null);
+        return;
+      }
+      if (showHelp) {
+        if (e.key === 'Escape' || e.key === '?') setShowHelp(false);
+        return;
+      }
+      if (e.key === '/') { e.preventDefault(); searchRef.current?.focus(); return; }
+      if (e.key === '?') { e.preventDefault(); setShowHelp(true); return; }
+      if (e.key === 'Escape') { searchRef.current?.blur(); setFocused(-1); return; }
+      if (e.key === 'j') {
+        setFocused((f) => Math.min(visible.length - 1, f + 1));
+        return;
+      }
+      if (e.key === 'k') {
+        setFocused((f) => Math.max(0, f - 1));
+        return;
+      }
+      const current = focused >= 0 ? visible[focused] : null;
+      if (!current) return;
+      if (e.key === 'f') { toggleFavorite(current.slug); incrementLike(current.slug); }
+      if (e.key === 'c') copyPermalink(current.slug);
+      if (e.key === 'Enter') setModalSlug(current.slug);
+    },
+    [modalSlug, showHelp, visible, focused, toggleFavorite, copyPermalink, incrementLike],
+  );
+
+  useEffect(() => {
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onKey]);
+
+  const modalMeme = useMemo(
+    () => (modalSlug && manifest ? manifest.memes.find((m) => m.slug === modalSlug) ?? null : null),
+    [modalSlug, manifest],
+  );
+
+  return (
+    <>
+      <div className="search" role="search">
+        <input
+          ref={searchRef}
+          type="search"
+          placeholder="search tags — e.g. sergey, moon, wagmi  (press / to focus)"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search memes by tag"
+        />
+        <button
+          type="button"
+          className={`filter-pill ${animatedOnly ? 'active' : ''}`}
+          onClick={() => setAnimatedOnly((v) => !v)}
+        >
+          GIFs only
+        </button>
+        <button
+          type="button"
+          className={`filter-pill ${favoritesOnly ? 'active' : ''}`}
+          onClick={() => setFavoritesOnly((v) => !v)}
+          disabled={favorites.size === 0}
+        >
+          Favorites ({favorites.size})
+        </button>
+        <button type="button" className="filter-pill" onClick={() => setShowHelp(true)} aria-label="Keyboard shortcuts">
+          ?
+        </button>
+      </div>
+
+      {visible.length === 0 ? (
+        <p style={{ textAlign: 'center', color: 'var(--muted)', padding: '40px 0' }}>
+          No memes match. Try a different tag or clear filters.
+        </p>
+      ) : (
+        <div className="gallery" role="list">
+          {visible.map((m, i) => (
+            <Card
+              key={m.slug}
+              meme={m}
+              focused={i === focused}
+              liked={favorites.has(m.slug)}
+              likeCount={likes[m.slug] ?? 0}
+              innerRef={i === focused ? focusedCardRef : null}
+              onOpenModal={() => setModalSlug(m.slug)}
+              onToggleFavorite={() => {
+                toggleFavorite(m.slug);
+                if (!favorites.has(m.slug)) incrementLike(m.slug);
+              }}
+              onCopyLink={() => copyPermalink(m.slug)}
+            />
+          ))}
+        </div>
+      )}
+
+      {visible.length < filtered.length && (
+        <div style={{ textAlign: 'center', marginTop: 24 }}>
+          <button type="button" className="btn" onClick={() => setPage((p) => p + 1)}>
+            𝚖⬡𝚛𝚎 𝚖𝚎𝚖𝚎 ({filtered.length - visible.length} more)
+          </button>
+        </div>
+      )}
+
+      {modalMeme && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setModalSlug(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={modalMeme.title || modalMeme.slug}
+        >
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <img src={memeUrl(modalMeme.filename)} alt={modalMeme.title || modalMeme.slug} />
+            <div className="modal-toolbar">
+              <a className="btn ghost" href={permalinkUrl(modalMeme.slug)}>
+                open permalink →
+              </a>
+              <button type="button" className="btn" onClick={() => copyPermalink(modalMeme.slug)}>
+                copy link
+              </button>
+              <button type="button" className="btn ghost" onClick={() => setModalSlug(null)}>
+                close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showHelp && <KeyboardHelp onClose={() => setShowHelp(false)} />}
+
+      {toast && <div className="toast">{toast}</div>}
+    </>
+  );
+}
+
+interface CardProps {
+  meme: MemeEntry;
+  focused: boolean;
+  liked: boolean;
+  likeCount: number;
+  innerRef: React.Ref<HTMLDivElement> | null;
+  onOpenModal: () => void;
+  onToggleFavorite: () => void;
+  onCopyLink: () => void;
+}
+
+function Card({ meme, focused, liked, likeCount, innerRef, onOpenModal, onToggleFavorite, onCopyLink }: CardProps) {
+  return (
+    <div ref={innerRef ?? undefined} className={`card ${focused ? 'focused' : ''}`} role="listitem">
+      <a href={permalinkUrl(meme.slug)} onClick={(e) => { e.preventDefault(); onOpenModal(); }}>
+        <img
+          src={memeUrl(meme.filename)}
+          alt={meme.title || meme.slug}
+          loading="lazy"
+          decoding="async"
+          width={meme.width || undefined}
+          height={meme.height || undefined}
+        />
+      </a>
+      <div className="card-overlay">
+        <button
+          type="button"
+          className={`like-btn ${liked ? 'liked' : ''}`}
+          onClick={onToggleFavorite}
+          aria-label={liked ? 'Unfavorite' : 'Favorite'}
+        >
+          <span className="heart" aria-hidden="true">♥</span>
+          {likeCount > 0 && <span>{likeCount}</span>}
+        </button>
+        <button type="button" className="tag-btn" onClick={onCopyLink} aria-label="Copy permalink">
+          link
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function KeyboardHelp({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="shortcut-dialog" role="dialog" aria-label="Keyboard shortcuts" onClick={onClose}>
+      <div className="shortcut-panel" onClick={(e) => e.stopPropagation()}>
+        <h3>⬡ Keyboard shortcuts</h3>
+        <dl>
+          <dt>/</dt><dd>focus search</dd>
+          <dt>j</dt><dd>next meme</dd>
+          <dt>k</dt><dd>previous meme</dd>
+          <dt>Enter</dt><dd>open focused meme</dd>
+          <dt>f</dt><dd>favorite focused</dd>
+          <dt>c</dt><dd>copy permalink</dd>
+          <dt>?</dt><dd>this help</dd>
+          <dt>Esc</dt><dd>close / unfocus</dd>
+        </dl>
+        <div style={{ marginTop: 16, textAlign: 'right' }}>
+          <button className="btn" type="button" onClick={onClose}>got it</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Theme toggle — SSR renders a neutral button to avoid a hydration mismatch
+// (the theme is applied pre-paint via an inline script, so SSR HTML lags the
+// real state). Once mounted on the client we read the live theme and render
+// the matching icon.
+export function ThemeToggle() {
+  const [mounted, setMounted] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    const applied = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    setTheme(applied);
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem(THEME_KEY, theme); } catch { /* ignore */ }
+  }, [theme, mounted]);
+
+  return (
+    <button
+      type="button"
+      className="filter-pill"
+      onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+      aria-label="Toggle theme"
+    >
+      {mounted ? (theme === 'dark' ? '☀︎' : '☾') : '◐'}
+    </button>
+  );
+}
+
+// Progress bar — minimal, not reactive to filter changes
+export function ProgressBar() {
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const onScroll = () => {
+      const h = document.documentElement;
+      const pct = (h.scrollTop / Math.max(1, h.scrollHeight - h.clientHeight)) * 100;
+      setWidth(Math.max(0, Math.min(100, pct)));
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  return (
+    <div className="progress-bar" aria-hidden="true">
+      <div className="progress" style={{ width: `${width}%` }} />
+    </div>
+  );
+}

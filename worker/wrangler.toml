@@ -1,0 +1,28 @@
+name = "chainlinkmeme-api"
+main = "src/index.ts"
+compatibility_date = "2026-04-01"
+workers_dev = true
+
+# Routed under the Pages site so /api/* hits this worker on production.
+# Fill in `zone_name` + `pattern` once the custom domain is wired up.
+# [[routes]]
+# pattern = "chainlinkme.me/api/*"
+# zone_name = "chainlinkme.me"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "chainlinkmeme"
+# Replace this with the real id returned by `wrangler d1 create chainlinkmeme`
+# before the first remote deploy. The value is ignored for local wrangler dev
+# but wrangler refuses to start if the key is missing or empty.
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[observability]
+enabled = true
+
+[vars]
+# Cache TTL for the bulk-likes response, seconds. Tune to taste.
+LIKES_CACHE_TTL = "60"
+# Per-IP rate limit: max increments per minute. Turnstile can relax this.
+LIKES_RATE_PER_MIN = "20"

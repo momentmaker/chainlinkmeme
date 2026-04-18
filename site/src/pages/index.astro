@@ -1,0 +1,40 @@
+---
+import Base from '../layouts/Base.astro';
+import Gallery, { ThemeToggle, ProgressBar } from '../components/Gallery';
+import { memeOfDay } from '../lib/meme-of-day';
+import { memeUrl, permalinkUrl } from '../lib/meme-url';
+import type { Manifest } from '../lib/manifest';
+import manifestJson from '../../public/manifest.json';
+
+// Manifest is imported server-side *only* to pick the meme-of-the-day for the
+// initial HTML. The Gallery component itself fetches /manifest.json at runtime
+// so the full data doesn't get serialized into the hydration payload.
+const manifest = manifestJson as Manifest;
+const mod = memeOfDay(manifest.memes);
+---
+<Base
+  title="⬡⏣⬢ chainlink meme ⬢⏣⬡"
+  description="community-curated archive of chainlink memes — browse, search by tag, favorite, share"
+>
+  <Fragment slot="head-extra">
+    <link rel="preload" href="/manifest.json" as="fetch" crossorigin="anonymous" />
+  </Fragment>
+
+  <ProgressBar client:load slot="progress" />
+  <ThemeToggle client:load slot="header-actions" />
+
+  {mod && (
+    <a href={permalinkUrl(mod.slug)} class="hero" style="text-decoration: none; color: white;">
+      <img class="hero-img" src={memeUrl(mod.filename)} alt={mod.title || mod.slug} />
+      <div>
+        <div class="hero-label">⬢ meme of the day</div>
+        <div class="hero-title">{mod.title || mod.slug}</div>
+        <div style="font-size: 12px; opacity: 0.8;">
+          {mod.tags.slice(0, 6).join(' · ')}
+        </div>
+      </div>
+    </a>
+  )}
+
+  <Gallery client:load />
+</Base>

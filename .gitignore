@@ -1,0 +1,23 @@
+node_modules
+.DS_Store
+.env
+.env.local
+.env.*.local
+
+# build outputs
+site/dist
+site/.astro
+site/public/manifest.json
+site/public/og
+site/public/embeddings.bin
+worker/.wrangler
+worker/dist
+
+# local state
+.wrangler
+.cache
+*.log
+
+# editor
+.vscode
+.idea

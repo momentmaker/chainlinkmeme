@@ -1,0 +1,62 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base
+  title="contribute — chainlink meme"
+  description="how to add a meme to the community-curated chainlink meme archive"
+>
+  <article class="permalink" style="max-width: 720px;">
+    <h1 class="permalink-title">⬢ contribute a meme</h1>
+
+    <p>
+      Anyone can submit a meme via a pull request. No account beyond GitHub. No upload form. Just commit a file.
+    </p>
+
+    <h2>the flow</h2>
+    <ol>
+      <li><a href="https://github.com/momentmaker/chainlinkmeme">fork the repo</a></li>
+      <li>drop <code>yourmeme.jpg</code> + <code>yourmeme.toml</code> into the <code>memes/</code> folder</li>
+      <li>fill out the TOML (tags, optional title + credit)</li>
+      <li>open a PR — CI validates your submission</li>
+      <li>a maintainer reviews, merges. Your meme is live in ~60s.</li>
+    </ol>
+
+    <h2>TOML schema</h2>
+    <pre style="background:#f6f8fa;padding:14px;border-radius:6px;overflow:auto;font-family:Menlo,monospace;font-size:12px;line-height:1.5;"><code>{`# memes/sergey_moon.toml
+
+# required — all tags must be in memes/_vocab.toml
+tags = ["sergey", "moon", "wagmi"]
+
+# encouraged
+title = "Sergey launches"
+
+# optional
+description = ""
+credit = "@someone"
+source_url = ""
+
+# auto-filled by CI on merge — leave blank
+submitted_by = ""
+date_added = ""
+nsfw = false`}</code></pre>
+
+    <h2>rules</h2>
+    <ul>
+      <li>only submit memes you have the right to share</li>
+      <li>on-topic: chainlink-flavored culture, not generic crypto</li>
+      <li>no hate, harassment, explicit content, or personal info about non-public people</li>
+      <li>compress files over 5 MB before committing</li>
+      <li>filename must be lowercase, <code>[a-z0-9_]</code>, unique</li>
+    </ul>
+
+    <p style="margin-top: 32px;">
+      full guide →
+      <a href="https://github.com/momentmaker/chainlinkmeme/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>
+    </p>
+
+    <div class="permalink-actions">
+      <a class="btn" href="https://github.com/momentmaker/chainlinkmeme/fork">fork on github</a>
+      <a class="btn ghost" href="/">← back to gallery</a>
+    </div>
+  </article>
+</Base>
