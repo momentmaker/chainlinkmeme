@@ -583,9 +583,11 @@ async function main() {
   }
 
   // Weekly snapshot OGs — one per committed week in site/src/data/weekly/.
-  // Cheap: only 1 tiny PNG per week, and it's what the Monday cron shares
-  // to X as a single-tweet link. Always re-render so a meme's thumbnail
-  // reflects its current file (e.g. someone re-uploads a higher-res copy).
+  // Follows the same skip-on-exists pattern as per-meme OGs: snapshots are
+  // immutable once written, so a historical week's PNG never needs to be
+  // re-rendered unless the design changes (bump the cache-key prefix in
+  // deploy.yml — see the ⚠ note above). That keeps each deploy O(new
+  // weeks) rather than O(all weeks ever).
   const WEEKLY_DIR = path.join(ROOT, 'site', 'src', 'data', 'weekly');
   if (fs.existsSync(WEEKLY_DIR)) {
     const memesBySlug = new Map<string, Meme>(manifest.memes.map((m) => [m.slug, m]));
@@ -593,12 +595,14 @@ async function main() {
     for (const file of snapFiles) {
       try {
         const snap = JSON.parse(fs.readFileSync(path.join(WEEKLY_DIR, file), 'utf8')) as WeeklySnapshot;
+        const outPath = path.join(OG_DIR, `week-${snap.week}.png`);
+        if (fs.existsSync(outPath)) { continue; }
         const png = await renderWeeklyCard(snap, memesBySlug, font);
         if (!png) {
           console.log(`[og] weekly ${snap.week}: empty snapshot, skipping`);
           continue;
         }
-        fs.writeFileSync(path.join(OG_DIR, `week-${snap.week}.png`), png);
+        fs.writeFileSync(outPath, png);
         console.log(`[og] week-${snap.week}.png rendered`);
       } catch (err) {
         console.error(`[og] weekly ${file}: ${(err as Error).message}`);

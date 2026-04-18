@@ -46,7 +46,7 @@ const weekOg = rows.length > 0 ? `${siteUrl}/og/week-${snap.week}.png` : undefin
 ---
 <Base
   title={`⬢ ${snap.week} — chainlink meme`}
-  description={`Top ${rows.length} memes for ${snap.week} (${snap.start} → ${snap.end})`}
+  description={`${rows.length === 1 ? 'Top meme' : `Top ${rows.length} memes`} for ${snap.week} (${snap.start} → ${snap.end})`}
   ogImage={weekOg}
 >
   <ThemeToggle client:load slot="header-actions" />
