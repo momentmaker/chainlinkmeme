@@ -86,9 +86,14 @@ const homeOg = `${siteUrl}/og/_home.png?v=${encodeURIComponent(lastBuilt || 'ini
 <script>
   // Cursor-reactive tilt + shine for the meme-of-the-day hero.
   // Vanilla JS keeps the payload tiny — no react island needed for this one.
-  const hero = document.querySelector<HTMLElement>('.hero');
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (hero && !reduce) {
+  // Rebinds on every astro:page-load so SPA navigation back to home doesn't
+  // leave a lifeless blue rectangle; dataset.bound prevents re-binding the
+  // same element twice if the router swaps body without replacing the hero.
+  function bindHero() {
+    const hero = document.querySelector<HTMLElement>('.hero');
+    if (!hero || hero.dataset.bound === '1') return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    hero.dataset.bound = '1';
     const MAX_TILT = 5;
     hero.addEventListener('mousemove', (e) => {
       const r = hero.getBoundingClientRect();
@@ -106,4 +111,6 @@ const homeOg = `${siteUrl}/og/_home.png?v=${encodeURIComponent(lastBuilt || 'ini
       hero.style.setProperty('--shine-opacity', '0');
     });
   }
+  bindHero();
+  document.addEventListener('astro:page-load', bindHero);
 </script>
