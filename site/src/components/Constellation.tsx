@@ -91,6 +91,72 @@ const IDENTITY_VIEW: View = { scale: 1, tx: 0, ty: 0 };
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 5;
 
+// ---- Ambient cosmos: starfield, nebula, comets ----
+// The page's tagline is "the archive as a cosmos"; these make it one.
+// All effects are gated on prefers-reduced-motion + viewport width so
+// mobile/low-power devices get a calmer but still starry view.
+
+interface Star { x: number; y: number; depth: number; size: number; phase: number; speed: number; }
+interface Nebula { x: number; y: number; radius: number; rgb: string; breathSpeed: number; breathPhase: number; baseAlpha: number; }
+interface Comet { x: number; y: number; vx: number; vy: number; age: number; life: number; tailLen: number; }
+
+function generateStars(w: number, h: number, count: number): Star[] {
+  const stars: Star[] = [];
+  // Cover 1.5× the viewport so moderate pan doesn't reveal empty edges.
+  const W = w * 1.5, H = h * 1.5;
+  for (let i = 0; i < count; i++) {
+    stars.push({
+      x: Math.random() * W - W * 0.25,
+      y: Math.random() * H - H * 0.25,
+      depth: Math.random(),  // 0 = far, 1 = near
+      size: 0.4 + Math.random() * 1.4,
+      phase: Math.random() * Math.PI * 2,
+      speed: 0.0008 + Math.random() * 0.0022,
+    });
+  }
+  return stars;
+}
+
+function generateNebulae(w: number, h: number): Nebula[] {
+  // Three large soft gradients. Colors picked to play with the brand blue
+  // without fighting it — cyan, magenta-ish, and a deep indigo.
+  const colors = ['88,160,255', '180,110,220', '70,90,200'];
+  const nebulae: Nebula[] = [];
+  for (let i = 0; i < 3; i++) {
+    nebulae.push({
+      x: 0.2 + Math.random() * 0.6,   // fraction of width
+      y: 0.2 + Math.random() * 0.6,
+      radius: Math.max(w, h) * (0.45 + Math.random() * 0.25),
+      rgb: colors[i] ?? '88,160,255',
+      breathSpeed: 0.00015 + Math.random() * 0.0002,
+      breathPhase: Math.random() * Math.PI * 2,
+      baseAlpha: 0.06 + Math.random() * 0.05,
+    });
+  }
+  return nebulae;
+}
+
+function spawnComet(w: number, h: number): Comet {
+  // Pick an entry edge + angle that sends it across the canvas.
+  const edge = Math.floor(Math.random() * 4);
+  let x = 0, y = 0, angle = 0;
+  const margin = 80;
+  const spread = Math.PI / 4;
+  if (edge === 0) { x = -margin; y = Math.random() * h; angle = (Math.random() - 0.5) * spread; }
+  else if (edge === 1) { x = w + margin; y = Math.random() * h; angle = Math.PI + (Math.random() - 0.5) * spread; }
+  else if (edge === 2) { x = Math.random() * w; y = -margin; angle = Math.PI / 2 + (Math.random() - 0.5) * spread; }
+  else { x = Math.random() * w; y = h + margin; angle = -Math.PI / 2 + (Math.random() - 0.5) * spread; }
+  const speed = 0.18 + Math.random() * 0.14;  // px/ms
+  return {
+    x, y,
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    age: 0,
+    life: 3800 + Math.random() * 1800,
+    tailLen: 70 + Math.random() * 40,
+  };
+}
+
 export default function Constellation({ manifestUrl = '/manifest.json' }: Props) {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
@@ -109,6 +175,11 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
   const viewRef = useRef<View>({ ...IDENTITY_VIEW });
   const dragRef = useRef({ active: false, moved: false, startX: 0, startY: 0, origTx: 0, origTy: 0 });
   const markDirtyRef = useRef<() => void>(() => {});
+  // Ambient effects state: starfield, nebulae, and a small pool of live
+  // comets. All regenerated or advanced inside the draw loop.
+  const starsRef = useRef<Star[]>([]);
+  const nebulaeRef = useRef<Nebula[]>([]);
+  const cometsRef = useRef<Comet[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -179,21 +250,34 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     if (!ctx) return;
 
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const narrow = window.innerWidth < 768;
+    // Feature gates. Mobile keeps a quiet starfield + static nebula but
+    // drops comets (the expensive "wow" layer) and twinkle/breath. Reduced-
+    // motion users get the fully-still scene.
+    const starCount = narrow ? 80 : 260;
+    const enableComets = !reduce && !narrow;
+    const enableTwinkle = !reduce;
+    const enableBreath = !reduce;
+    // The scene lives: stars twinkle, nebula breathes, comets fly. That
+    // means the raf loop can't idle-skip after physics settles the way it
+    // used to — drive it continuously unless reduce-motion is on.
+    const continuous = !reduce;
+
     let raf = 0;
     let iters = 0;
     const MAX_SETTLE_ITERS = reduce ? 120 : 240;
-    // Stop as soon as the total kinetic energy per node drops below this
-    // threshold — in practice the layout converges in 2–3s on desktop.
     const KE_THRESHOLD = 0.08;
     const MIN_SETTLE_ITERS = reduce ? 30 : 80;
 
-    // Separate "needs redraw" signal for after the physics has settled —
-    // hover + pan/zoom changes flip this on and the next frame picks it up
-    // without paying to re-run the force sim.
     let settled = false;
     let needsRedraw = true;
     const markDirty = () => { needsRedraw = true; };
     markDirtyRef.current = markDirty;
+
+    const startTime = performance.now();
+    let lastFrame = startTime;
+    let lastCometSpawn = startTime;
+    let nextCometDelay = 8000 + Math.random() * 12000;  // first comet 8-20s in
 
     let currentDpr = window.devicePixelRatio || 1;
     function resize() {
@@ -203,15 +287,23 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
       canvas!.height = rect.height * currentDpr;
       canvas!.style.width = rect.width + 'px';
       canvas!.style.height = rect.height + 'px';
-      // Writing to canvas.width clears the bitmap — force a redraw even if
-      // the sim has already settled, otherwise the canvas stays blank after
-      // a window resize.
+      // Regenerate ambient layers when the canvas resizes — star density
+      // and nebula positions are relative to the viewport, and stale stars
+      // from a pre-resize layout leave empty patches after a viewport
+      // change.
+      starsRef.current = generateStars(rect.width, rect.height, starCount);
+      nebulaeRef.current = generateNebulae(rect.width, rect.height);
       markDirty();
     }
     resize();
     window.addEventListener('resize', resize);
 
     function draw() {
+      const now = performance.now();
+      const dt = Math.min(64, now - lastFrame);  // cap dt so tab-wake doesn't teleport comets
+      lastFrame = now;
+      const t = now - startTime;
+
       const rect = wrapper!.getBoundingClientRect();
       const w = rect.width;
       const h = rect.height;
@@ -226,43 +318,102 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
           settled = true;
           for (const n of nodes) { n.vx = 0; n.vy = 0; }
         }
-      } else if (!needsRedraw) {
+      } else if (!continuous && !needsRedraw) {
+        // Reduced-motion path: freeze after settle and only redraw on user
+        // input (hover, pan, zoom).
         raf = requestAnimationFrame(draw);
         return;
       }
       needsRedraw = false;
 
       const v = viewRef.current;
-      // Combine DPR + view transform. Everything below draws in world
-      // coordinates; the matrix handles screen projection.
+      const currentHover = hoverTagRef.current;
+
+      // --- Layer 1: clear + nebula wash (screen space) ---
       ctx!.setTransform(1, 0, 0, 1, 0, 0);
       ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
+      ctx!.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
+
+      for (const n of nebulaeRef.current) {
+        const breath = enableBreath
+          ? n.baseAlpha * (0.75 + 0.25 * Math.sin(t * n.breathSpeed + n.breathPhase))
+          : n.baseAlpha;
+        const cx = n.x * w;
+        const cy = n.y * h;
+        const grad = ctx!.createRadialGradient(cx, cy, 0, cx, cy, n.radius);
+        grad.addColorStop(0, `rgba(${n.rgb}, ${breath.toFixed(3)})`);
+        grad.addColorStop(1, `rgba(${n.rgb}, 0)`);
+        ctx!.fillStyle = grad;
+        ctx!.fillRect(0, 0, w, h);
+      }
+
+      // --- Layer 2: starfield with parallax + twinkle (screen space) ---
+      for (const s of starsRef.current) {
+        // Depth drives both parallax rate and visual prominence.
+        const parallax = 0.04 + s.depth * 0.25;
+        // Wrap so we never run out of stars near viewport edges.
+        const raw = s.x + v.tx * parallax;
+        const ry = s.y + v.ty * parallax;
+        const sx = ((raw % w) + w) % w;
+        const sy = ((ry % h) + h) % h;
+        const twinkle = enableTwinkle ? 0.55 + 0.45 * Math.sin(t * s.speed + s.phase) : 1;
+        const alpha = (0.25 + s.depth * 0.55) * twinkle;
+        // Near stars are a cooler cyan, far stars fade to brand indigo.
+        const col = s.depth > 0.7 ? '255,255,255' : s.depth > 0.4 ? '200,215,255' : '140,160,240';
+        ctx!.fillStyle = `rgba(${col}, ${alpha.toFixed(3)})`;
+        const r = s.size + s.depth * 0.7;
+        ctx!.beginPath();
+        ctx!.arc(sx, sy, r, 0, Math.PI * 2);
+        ctx!.fill();
+      }
+
+      // --- Layer 3: the graph (world space) ---
       ctx!.setTransform(
         currentDpr * v.scale, 0, 0, currentDpr * v.scale,
         currentDpr * v.tx, currentDpr * v.ty,
       );
-      const currentHover = hoverTagRef.current;
 
-      // Edges — keep stroke width constant in screen pixels regardless of zoom.
-      ctx!.lineWidth = 1 / v.scale;
+      // Edges — hovered neighbors glow brighter with a soft blue shadow.
       for (const e of edges) {
         const a = nodes[e.a];
         const b = nodes[e.b];
-        const opacity = currentHover && (a.tag === currentHover || b.tag === currentHover) ? 0.5 : 0.08;
-        ctx!.strokeStyle = `rgba(47, 98, 223, ${opacity})`;
+        const hot = currentHover && (a.tag === currentHover || b.tag === currentHover);
+        if (hot) {
+          ctx!.strokeStyle = 'rgba(110, 155, 255, 0.7)';
+          ctx!.lineWidth = 1.5 / v.scale;
+          ctx!.shadowColor = 'rgba(110, 155, 255, 0.9)';
+          ctx!.shadowBlur = 8;
+        } else {
+          ctx!.strokeStyle = 'rgba(47, 98, 223, 0.08)';
+          ctx!.lineWidth = 1 / v.scale;
+          ctx!.shadowBlur = 0;
+        }
         ctx!.beginPath();
         ctx!.moveTo(a.x, a.y);
         ctx!.lineTo(b.x, b.y);
         ctx!.stroke();
       }
+      ctx!.shadowBlur = 0;
 
-      // Nodes — pointy-top hexagons matching the site's clip-path identity.
+      // Nodes — pointy-top hexagons. Small ones shimmer like distant stars.
       for (const n of nodes) {
         const lit = currentHover === n.tag;
+        const small = n.radius < 12;
+        const shimmer = small && enableTwinkle
+          ? 0.7 + 0.3 * Math.sin(t * 0.0012 + (n.x + n.y) * 0.01)
+          : 1;
         hexPath(ctx!, n.x, n.y, n.radius);
-        ctx!.fillStyle = lit ? '#2f62df' : 'rgba(47, 98, 223, 0.65)';
+        if (lit) {
+          ctx!.fillStyle = '#2f62df';
+          ctx!.shadowColor = 'rgba(110, 155, 255, 0.85)';
+          ctx!.shadowBlur = 16;
+        } else {
+          ctx!.fillStyle = `rgba(47, 98, 223, ${(0.65 * shimmer).toFixed(3)})`;
+          ctx!.shadowBlur = 0;
+        }
         ctx!.fill();
-        ctx!.strokeStyle = lit ? 'white' : 'rgba(255,255,255,0.25)';
+        ctx!.shadowBlur = 0;
+        ctx!.strokeStyle = lit ? 'white' : `rgba(255,255,255,${(0.25 * shimmer).toFixed(3)})`;
         ctx!.lineWidth = (lit ? 2 : 1) / v.scale;
         ctx!.stroke();
 
@@ -274,6 +425,56 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
           ctx!.textBaseline = 'middle';
           ctx!.fillText(n.tag, n.x, n.y + n.radius + 12 / v.scale);
         }
+      }
+
+      // --- Layer 4: comets (screen space, on top for drama) ---
+      if (enableComets) {
+        ctx!.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
+        // Maybe spawn a new one — but never more than 2 live at once.
+        if (t - (lastCometSpawn - startTime) > nextCometDelay && cometsRef.current.length < 2) {
+          cometsRef.current.push(spawnComet(w, h));
+          lastCometSpawn = now;
+          nextCometDelay = 15000 + Math.random() * 25000;  // 15–40s between spawns
+        }
+        // Advance + draw + cull.
+        const alive: Comet[] = [];
+        for (const c of cometsRef.current) {
+          c.x += c.vx * dt;
+          c.y += c.vy * dt;
+          c.age += dt;
+          if (c.age >= c.life || c.x < -250 || c.x > w + 250 || c.y < -250 || c.y > h + 250) continue;
+          alive.push(c);
+          // Age-driven alpha envelope: fade in, hold, fade out.
+          const lifeFrac = c.age / c.life;
+          const env = lifeFrac < 0.15
+            ? lifeFrac / 0.15
+            : lifeFrac > 0.85
+              ? (1 - lifeFrac) / 0.15
+              : 1;
+          const headX = c.x, headY = c.y;
+          const dirLen = Math.hypot(c.vx, c.vy) || 1;
+          const tailX = headX - (c.vx / dirLen) * c.tailLen;
+          const tailY = headY - (c.vy / dirLen) * c.tailLen;
+          const grad = ctx!.createLinearGradient(tailX, tailY, headX, headY);
+          grad.addColorStop(0, 'rgba(200, 220, 255, 0)');
+          grad.addColorStop(1, `rgba(220, 235, 255, ${(0.9 * env).toFixed(3)})`);
+          ctx!.strokeStyle = grad;
+          ctx!.lineCap = 'round';
+          ctx!.lineWidth = 1.8;
+          ctx!.beginPath();
+          ctx!.moveTo(tailX, tailY);
+          ctx!.lineTo(headX, headY);
+          ctx!.stroke();
+          // Comet head — a bright pinprick with a soft halo.
+          ctx!.shadowColor = 'rgba(180, 210, 255, 0.8)';
+          ctx!.shadowBlur = 10;
+          ctx!.fillStyle = `rgba(255, 255, 255, ${(0.95 * env).toFixed(3)})`;
+          ctx!.beginPath();
+          ctx!.arc(headX, headY, 2, 0, Math.PI * 2);
+          ctx!.fill();
+          ctx!.shadowBlur = 0;
+        }
+        cometsRef.current = alive;
       }
 
       raf = requestAnimationFrame(draw);
