@@ -68,6 +68,17 @@ jobs:
           PUBLIC_REPO_REF: ${{ github.sha }}
         run: pnpm manifest
 
+      # Cache rendered OG images keyed on the memes/ content hash. Only freshly
+      # added or edited memes re-render per deploy — avoids spending 20+ minutes
+      # every build re-rasterizing the same 1,798 cards.
+      - name: Cache OG images
+        uses: actions/cache@v4
+        with:
+          path: site/public/og
+          key: og-v1-${{ hashFiles('memes/**/*.toml', 'scripts/build-og-images.ts', 'scripts/assets/*') }}
+          restore-keys: |
+            og-v1-
+
       - name: Build OG images
         run: pnpm og
 
