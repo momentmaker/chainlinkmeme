@@ -11,13 +11,15 @@ import manifestJson from '../../public/manifest.json';
 // so the full data doesn't get serialized into the hydration payload.
 const manifest = manifestJson as Manifest;
 const mod = memeOfDay(manifest.memes);
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const manifestHref = `${base}/manifest.json`;
 ---
 <Base
   title="⬡⏣⬢ chainlink meme ⬢⏣⬡"
   description="community-curated archive of chainlink memes — browse, search by tag, favorite, share"
 >
   <Fragment slot="head-extra">
-    <link rel="preload" href="/manifest.json" as="fetch" crossorigin="anonymous" />
+    <link rel="preload" href={manifestHref} as="fetch" crossorigin="anonymous" />
   </Fragment>
 
   <ProgressBar client:load slot="progress" />
@@ -36,5 +38,5 @@ const mod = memeOfDay(manifest.memes);
     </a>
   )}
 
-  <Gallery client:load />
+  <Gallery client:load manifestUrl={manifestHref} />
 </Base>

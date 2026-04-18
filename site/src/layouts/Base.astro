@@ -10,8 +10,9 @@ export interface Props {
 }
 
 const { title, description, ogImage, canonical } = Astro.props;
-const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://chainlinkme.me';
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://momentmaker.github.io';
 const fullCanonical = canonical ?? siteUrl + Astro.url.pathname;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 // Emit og:image only when a real per-page image exists. The OG build step
 // generates one per permalink; the home page will get a default hero later.
 const fullOg = ogImage ?? null;
@@ -25,7 +26,7 @@ const fullOg = ogImage ?? null;
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={fullCanonical} />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
 
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
@@ -64,17 +65,17 @@ const fullOg = ogImage ?? null;
     <slot name="progress" />
     <main class="page">
       <header class="header">
-        <a class="brand" href="/">⬡⏣⬢ chainlink meme ⬢⏣⬡</a>
+        <a class="brand" href={`${base}/`}>⬡⏣⬢ chainlink meme ⬢⏣⬡</a>
         <span class="tagline">cosmic memes by linkmarines, for chainlink</span>
         <div class="right">
           <slot name="header-actions" />
-          <a href="/contribute" class="filter-pill">contribute</a>
+          <a href={`${base}/contribute/`} class="filter-pill">contribute</a>
         </div>
       </header>
       <slot />
       <footer class="footer">
         <p>
-          community-curated archive — <a href="/contribute">submit a meme</a> ·
+          community-curated archive — <a href={`${base}/contribute/`}>submit a meme</a> ·
           <a href="https://github.com/momentmaker/chainlinkmeme" target="_blank" rel="noopener">source on github</a>
         </p>
       </footer>

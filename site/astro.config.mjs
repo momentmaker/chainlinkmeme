@@ -41,9 +41,17 @@ const serveMemesInDev = {
   },
 };
 
+// Site/base are overridden by env vars in CI so we can ship under
+// `momentmaker.github.io/chainlinkmeme/` initially and switch to a custom
+// domain later without code changes.
+const site = process.env.SITE_URL ?? 'https://momentmaker.github.io';
+const base = process.env.BASE_PATH ?? '/chainlinkmeme';
+
 export default defineConfig({
-  site: 'https://chainlinkme.me',
+  site,
+  base,
   output: 'static',
+  trailingSlash: 'always',
   integrations: [react(), sitemap(), serveMemesInDev],
   build: {
     assets: '_astro',

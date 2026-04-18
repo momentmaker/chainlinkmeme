@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Manifest, MemeEntry } from '../lib/manifest';
-import { memeUrl, permalinkUrl } from '../lib/meme-url';
+import { apiUrl, memeUrl, permalinkUrl } from '../lib/meme-url';
 import { filterMemes } from '../lib/search';
 
 interface Props {
@@ -72,7 +72,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   }, [query, animatedOnly, favoritesOnly]);
 
   useEffect(() => {
-    fetch('/api/likes')
+    fetch(apiUrl('/api/likes'))
       .then((r) => (r.ok ? (r.json() as Promise<Likes>) : {}))
       .then(setLikes)
       .catch(() => {});
@@ -103,7 +103,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
 
   const incrementLike = useCallback(async (slug: string) => {
     try {
-      const res = await fetch(`/api/likes/${encodeURIComponent(slug)}`, { method: 'POST' });
+      const res = await fetch(apiUrl(`/api/likes/${encodeURIComponent(slug)}`), { method: 'POST' });
       if (res.ok) {
         const body = (await res.json()) as { count: number };
         setLikes((prev) => ({ ...prev, [slug]: body.count }));

@@ -15,7 +15,7 @@ database_name = "chainlinkmeme"
 # Replace this with the real id returned by `wrangler d1 create chainlinkmeme`
 # before the first remote deploy. The value is ignored for local wrangler dev
 # but wrangler refuses to start if the key is missing or empty.
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "9ca6fd0b-b45e-49ee-b1a1-448a347326f0"
 migrations_dir = "migrations"
 
 [observability]
