@@ -80,6 +80,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
       <div class="permalink-actions">
         <button type="button" class="btn copy-link-btn" data-permalink>copy link</button>
         <button type="button" class="btn ghost" data-download data-url={memeUrl(meme.filename)} data-filename={meme.filename}>download</button>
+        <button type="button" class="btn ghost" data-sticker data-url={memeUrl(meme.filename)} data-slug={meme.slug} data-animated={meme.animated ? '1' : '0'}>save as sticker</button>
         <a class="btn ghost"
            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(displayTitle + ' — chainlinkme.me')}&url=${encodeURIComponent(siteUrl + Astro.url.pathname)}`}
            target="_blank" rel="noopener">share →</a>
@@ -174,7 +175,82 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
       }
     }
 
+    // Save-as-sticker: resize the meme to 512x512 WebP (or PNG fallback) in
+    // the browser via canvas, then trigger a download. That's the exact
+    // format Telegram/Discord/Slack expect for custom stickers. For animated
+    // GIFs we hand back the raw file — static sticker packs can't encode
+    // animation without a full .tgs pipeline, which isn't worth the weight.
+    function wireSticker() {
+      const btn = document.querySelector<HTMLButtonElement>('[data-sticker]');
+      if (!btn || btn.dataset.bound) return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', async () => {
+        const url = btn.dataset.url;
+        const slug = btn.dataset.slug;
+        const animated = btn.dataset.animated === '1';
+        if (!url || !slug) return;
+        const original = btn.textContent ?? 'save as sticker';
+        btn.textContent = 'preparing…';
+        btn.disabled = true;
+        const w = window as unknown as { umami?: { track: (n: string, d?: Record<string, unknown>) => void } };
+        w.umami?.track('sticker-save', { slug, animated });
+        try {
+          if (animated) {
+            const res = await fetch(url, { mode: 'cors' });
+            const blob = await res.blob();
+            const obj = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = obj;
+            a.download = `${slug}-sticker.gif`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(obj), 1000);
+            btn.textContent = '✓ saved (gif)';
+          } else {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            await new Promise<void>((resolve, reject) => {
+              img.onload = () => resolve();
+              img.onerror = () => reject(new Error('image load failed'));
+              img.src = url;
+            });
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) throw new Error('no 2d context');
+            // Cover-fit centered: fills the square with the longer side
+            // cropped. Matches sticker platform conventions.
+            const scale = Math.max(512 / img.width, 512 / img.height);
+            const drawW = img.width * scale;
+            const drawH = img.height * scale;
+            const dx = (512 - drawW) / 2;
+            const dy = (512 - drawH) / 2;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, dx, dy, drawW, drawH);
+            const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', 0.92));
+            if (!blob) throw new Error('toBlob failed');
+            const obj = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = obj;
+            a.download = `${slug}-sticker.webp`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(obj), 1000);
+            btn.textContent = '✓ saved';
+          }
+        } catch {
+          btn.textContent = 'sticker failed';
+        } finally {
+          setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1800);
+        }
+      });
+    }
+
     wirePermalinkActions();
-    document.addEventListener('astro:page-load', wirePermalinkActions);
+    wireSticker();
+    document.addEventListener('astro:page-load', () => { wirePermalinkActions(); wireSticker(); });
   </script>
 </Base>
