@@ -241,7 +241,13 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
             setTimeout(() => URL.revokeObjectURL(obj), 1000);
             btn.textContent = '✓ saved';
           }
-        } catch {
+        } catch (err) {
+          // Most likely culprit: a CDN edge stripped CORS headers so the
+          // canvas is tainted and toBlob throws SecurityError. Surface it
+          // to umami so we can see if this becomes a real user-facing
+          // issue rather than a theoretical one.
+          const reason = err instanceof Error ? err.name : 'unknown';
+          w.umami?.track('sticker-fail', { slug, reason });
           btn.textContent = 'sticker failed';
         } finally {
           setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1800);

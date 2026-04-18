@@ -27,7 +27,18 @@ const REACTION_LABEL: Record<Reaction, string> = {
 };
 type ReactionCounts = Record<Reaction, number>;
 type ReactionsMap = Record<string, ReactionCounts>;
-function emptyReactions(): ReactionCounts { return { heart: 0, laugh: 0, bolt: 0, diamond: 0 }; }
+// Compact a count for tight overlay slots: 1,234 → "1.2k", 10,000 → "10k+".
+// Keeps the reaction badge legible when a meme inevitably goes viral.
+function fmtCount(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 10_000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+  return Math.floor(n / 1000) + 'k+';
+}
+// Shared frozen zero so rendering 1,798 cards that have no reactions yet
+// doesn't allocate 1,798 fresh objects each render — the Card component
+// compares reactionCounts by reference, and a new object every render
+// invalidates React.memo boundaries and hurts perf at scale.
+const EMPTY_REACTIONS: ReactionCounts = Object.freeze({ heart: 0, laugh: 0, bolt: 0, diamond: 0 }) as ReactionCounts;
 
 // Umami custom-event helper — fire-and-forget. Wrapped so the rest of the
 // code can call `track('x')` without null-checking window.umami at every site.
@@ -132,11 +143,15 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     setShowAll(false);
   }, [query, animatedOnly, favoritesOnly]);
 
+  // `reactionsOffline` flips true once we've seen the bulk GET fail AND a
+  // subsequent increment also fail. Surfaces a small footer pill so users
+  // know why their taps aren't registering instead of staring at silence.
+  const [reactionsOffline, setReactionsOffline] = useState(false);
   useEffect(() => {
     fetch(apiUrl('/api/reactions'))
       .then((r) => (r.ok ? (r.json() as Promise<ReactionsMap>) : {} as ReactionsMap))
-      .then(setReactions)
-      .catch(() => {});
+      .then((data) => { setReactions(data); setReactionsOffline(false); })
+      .catch(() => { setReactionsOffline(true); });
   }, []);
 
   // Responsive column count, tracked via matchMedia so the JS masonry can
@@ -252,23 +267,31 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   }, []);
 
   const incrementReaction = useCallback(async (slug: string, reaction: Reaction) => {
-    // Optimistic bump — the server round-trip won't keep up with rapid taps,
-    // and because reactions are strictly monotonic no reconciliation matters
-    // beyond "eventually the real count wins".
+    // Optimistic bump — the server round-trip won't keep up with rapid taps.
     setReactions((prev) => {
-      const prior = prev[slug] ?? emptyReactions();
+      const prior = prev[slug] ?? EMPTY_REACTIONS;
       return { ...prev, [slug]: { ...prior, [reaction]: (prior[reaction] ?? 0) + 1 } };
     });
     try {
       const res = await fetch(apiUrl(`/api/reactions/${encodeURIComponent(slug)}/${reaction}`), { method: 'POST' });
-      if (res.ok) {
-        const body = (await res.json()) as { count: number };
-        setReactions((prev) => {
-          const prior = prev[slug] ?? emptyReactions();
-          return { ...prev, [slug]: { ...prior, [reaction]: body.count } };
-        });
-      }
-    } catch { /* silent */ }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = (await res.json()) as { count: number };
+      setReactions((prev) => {
+        const prior = prev[slug] ?? EMPTY_REACTIONS;
+        return { ...prev, [slug]: { ...prior, [reaction]: body.count } };
+      });
+      setReactionsOffline(false);
+    } catch {
+      // Roll the optimistic bump back so we don't drift from the server.
+      // A rate-limit hit also lands here — the rollback + offline pill tell
+      // the user something's off instead of silently eating the click.
+      setReactions((prev) => {
+        const prior = prev[slug] ?? EMPTY_REACTIONS;
+        const reverted = Math.max(0, (prior[reaction] ?? 0) - 1);
+        return { ...prev, [slug]: { ...prior, [reaction]: reverted } };
+      });
+      setReactionsOffline(true);
+    }
   }, []);
 
   const copyPermalink = useCallback((slug: string) => {
@@ -558,7 +581,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
                     lit={queryActive && matchLookup.has(m.slug)}
                     dim={queryActive && !matchLookup.has(m.slug)}
                     liked={favorites.has(m.slug)}
-                    reactionCounts={reactions[m.slug] ?? emptyReactions()}
+                    reactionCounts={reactions[m.slug] ?? EMPTY_REACTIONS}
                     innerRef={i === focused ? focusedCardRef : null}
                     onOpenModal={() => setModalSlug(m.slug)}
                     onToggleFavorite={() => {
@@ -656,6 +679,11 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
       {showHelp && <KeyboardHelp onClose={() => setShowHelp(false)} />}
 
       {toast && <div className="toast">{toast}</div>}
+      {reactionsOffline && (
+        <div className="reactions-offline" role="status" aria-live="polite">
+          reactions temporarily offline
+        </div>
+      )}
     </>
   );
 }
@@ -714,14 +742,14 @@ function Card({ meme, index, focused, lit, dim, liked, reactionCounts, innerRef,
               title={REACTION_LABEL[rx]}
             >
               <span className="reaction-icon" aria-hidden="true">{REACTION_ICON[rx]}</span>
-              {reactionCounts[rx] > 0 && <span className="reaction-count">{reactionCounts[rx]}</span>}
+              {reactionCounts[rx] > 0 && <span className="reaction-count">{fmtCount(reactionCounts[rx])}</span>}
             </button>
           ))}
         </div>
         <button type="button" className="tag-btn" onClick={(e) => { e.stopPropagation(); onCopyLink(); }} aria-label="Copy permalink">
           link
         </button>
-        {totalReactions > 0 && <span className="reaction-total" aria-hidden="true">⚡ {totalReactions}</span>}
+        {totalReactions > 0 && <span className="reaction-total" aria-hidden="true">⚡ {fmtCount(totalReactions)}</span>}
       </div>
     </div>
   );

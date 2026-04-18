@@ -75,6 +75,12 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
   const [hoverTag, setHoverTag] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  // Ref mirror of hoverTag so the draw loop can pick up latest hover state
+  // without being in the effect's dep array. Including hoverTag as a dep
+  // cancels+restarts the raf loop on every mouse move, which resets the
+  // physics sim and means the graph never settles.
+  const hoverTagRef = useRef<string | null>(null);
+  useEffect(() => { hoverTagRef.current = hoverTag; }, [hoverTag]);
 
   useEffect(() => {
     fetch(manifestUrl).then((r) => r.json() as Promise<Manifest>).then(setManifest).catch(() => {});
@@ -139,7 +145,10 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let raf = 0;
     let iters = 0;
-    const MAX_SETTLE_ITERS = reduce ? 180 : Infinity;
+    // Always settle within ~10s of animation, even without reduced-motion —
+    // the layout converges long before that and running forever burns CPU
+    // for no benefit. Hover re-renders in the existing draw pass.
+    const MAX_SETTLE_ITERS = reduce ? 180 : 600;
 
     function resize() {
       const rect = wrapper!.getBoundingClientRect();
@@ -153,19 +162,37 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     resize();
     window.addEventListener('resize', resize);
 
+    // Separate "needs redraw" signal for after the physics has settled —
+    // hover changes flip this on and the next frame picks it up without
+    // paying to re-run the force sim.
+    let settled = false;
+    let needsRedraw = true;
+    const hoverObserver = () => { needsRedraw = true; };
+
     function draw() {
       const rect = wrapper!.getBoundingClientRect();
       const w = rect.width;
       const h = rect.height;
-      runPhysics(nodes, edges, w, h);
+
+      if (!settled) {
+        runPhysics(nodes, edges, w, h);
+        iters++;
+        if (iters >= MAX_SETTLE_ITERS) settled = true;
+      } else if (!needsRedraw) {
+        raf = requestAnimationFrame(draw);
+        return;
+      }
+      needsRedraw = false;
+
       ctx!.clearRect(0, 0, w, h);
+      const currentHover = hoverTagRef.current;
 
       // Edges
       ctx!.lineWidth = 1;
       for (const e of edges) {
         const a = nodes[e.a];
         const b = nodes[e.b];
-        const opacity = hoverTag && (a.tag === hoverTag || b.tag === hoverTag) ? 0.5 : 0.08;
+        const opacity = currentHover && (a.tag === currentHover || b.tag === currentHover) ? 0.5 : 0.08;
         ctx!.strokeStyle = `rgba(47, 98, 223, ${opacity})`;
         ctx!.beginPath();
         ctx!.moveTo(a.x, a.y);
@@ -175,7 +202,7 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
 
       // Nodes
       for (const n of nodes) {
-        const lit = hoverTag === n.tag;
+        const lit = currentHover === n.tag;
         ctx!.beginPath();
         ctx!.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
         ctx!.fillStyle = lit ? '#2f62df' : 'rgba(47, 98, 223, 0.65)';
@@ -193,13 +220,25 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
         }
       }
 
-      iters++;
-      if (iters < MAX_SETTLE_ITERS) raf = requestAnimationFrame(draw);
+      raf = requestAnimationFrame(draw);
     }
 
     raf = requestAnimationFrame(draw);
+    // Poll the hoverTag ref via a microtask loop? Simpler: dirty flag is
+    // flipped by a wrapper on the pointer handlers below via the shared
+    // closure variable. Export the flipper through the ref.
+    (wrapper as HTMLDivElement & { __markDirty?: () => void }).__markDirty = hoverObserver;
+
     return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
-  }, [nodes, edges, hoverTag, maxCount]);
+  }, [nodes, edges, maxCount]);
+
+  // Flip the dirty flag on hover change so the already-running raf loop
+  // picks up the new hover state. Decoupled from the raf-setup effect so
+  // hovering doesn't tear down and rebuild the animation.
+  useEffect(() => {
+    const wrapper = wrapperRef.current as (HTMLDivElement & { __markDirty?: () => void }) | null;
+    wrapper?.__markDirty?.();
+  }, [hoverTag]);
 
   const onPointer = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -217,7 +256,7 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
     setHoverTag(nearest?.tag ?? null);
   };
 
-  const onClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const onClick = async (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     const x = e.clientX - rect.left;
@@ -227,7 +266,16 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
       const dy = n.y - y;
       if (dx * dx + dy * dy < (n.radius + 6) ** 2) {
         const base = import.meta.env.BASE_URL.replace(/\/$/, '');
-        window.location.href = `${base}/?q=${encodeURIComponent(n.tag)}`;
+        const target = `${base}/?q=${encodeURIComponent(n.tag)}`;
+        // Prefer Astro's ClientRouter navigate so we keep the hex view
+        // transition into the gallery. Fall back to a full load if the
+        // module is unavailable (dev without transitions, etc.).
+        try {
+          const mod = await import('astro:transitions/client');
+          mod.navigate(target);
+        } catch {
+          window.location.href = target;
+        }
         return;
       }
     }

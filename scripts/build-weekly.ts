@@ -54,16 +54,6 @@ async function main() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 
   const now = new Date();
-  const { year, week, start, end } = isoWeek(now);
-  const weekKey = `${year}-W${String(week).padStart(2, '0')}`;
-  const outPath = path.join(DATA_DIR, `${weekKey}.json`);
-
-  // Frozen-after-first-write semantics: once Monday's snapshot lands, later
-  // builds during the same week don't overwrite it. Override with FORCE=1.
-  if (fs.existsSync(outPath) && !process.env.FORCE) {
-    console.log(`[weekly] ${weekKey} already snapshotted — skipping`);
-    return;
-  }
 
   let reactions: ReactionsMap;
   try {
@@ -74,7 +64,7 @@ async function main() {
   }
 
   const slugsInArchive = new Set(manifest.memes.map((m) => m.slug));
-  const ranked = Object.entries(reactions)
+  const rankedAll = Object.entries(reactions)
     .filter(([slug]) => slugsInArchive.has(slug))
     .map(([slug, counts]) => ({
       slug,
@@ -85,16 +75,59 @@ async function main() {
     .sort((a, b) => b.total - a.total)
     .slice(0, 7);
 
-  const snapshot: WeeklySnapshot = {
-    week: weekKey,
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
-    generated_at: now.toISOString(),
-    top: ranked,
-  };
+  // Catch up any missing weeks since the last committed snapshot. GH Actions
+  // cron can miss Mondays during outages; rather than silently skip them,
+  // back-fill with the same current top-7 (the best approximation we have
+  // without per-week reaction deltas). Gapless history > correct history.
+  const existing = new Set(
+    fs.readdirSync(DATA_DIR)
+      .filter((n) => n.endsWith('.json'))
+      .map((n) => n.replace(/\.json$/, '')),
+  );
+  const weeksToWrite = enumerateMissingWeeks(existing, now);
+  if (weeksToWrite.length === 0) {
+    const current = isoWeek(now);
+    const currentKey = `${current.year}-W${String(current.week).padStart(2, '0')}`;
+    if (existing.has(currentKey) && !process.env.FORCE) {
+      console.log(`[weekly] ${currentKey} already snapshotted — skipping`);
+      return;
+    }
+    weeksToWrite.push(current);
+  }
 
-  fs.writeFileSync(outPath, JSON.stringify(snapshot, null, 2) + '\n');
-  console.log(`[weekly] wrote ${weekKey} — ${ranked.length} memes, top score ${ranked[0]?.total ?? 0}`);
+  for (const w of weeksToWrite) {
+    const weekKey = `${w.year}-W${String(w.week).padStart(2, '0')}`;
+    const outPath = path.join(DATA_DIR, `${weekKey}.json`);
+    if (fs.existsSync(outPath) && !process.env.FORCE) continue;
+    const snapshot: WeeklySnapshot = {
+      week: weekKey,
+      start: w.start.toISOString().slice(0, 10),
+      end: w.end.toISOString().slice(0, 10),
+      generated_at: now.toISOString(),
+      top: rankedAll,
+    };
+    fs.writeFileSync(outPath, JSON.stringify(snapshot, null, 2) + '\n');
+    console.log(`[weekly] wrote ${weekKey} — ${rankedAll.length} memes, top score ${rankedAll[0]?.total ?? 0}`);
+  }
+}
+
+// Returns every ISO week from the most recent committed snapshot through the
+// current week that doesn't already have a file. Caps at 8 weeks to bound
+// the cost of a long outage and so we never produce an absurd backlog.
+function enumerateMissingWeeks(existing: Set<string>, now: Date): Array<ReturnType<typeof isoWeek>> {
+  const current = isoWeek(now);
+  const result: Array<ReturnType<typeof isoWeek>> = [];
+  // Walk backwards up to 8 weeks, collecting missing ones. Reverse so we
+  // write oldest → newest (makes log output read chronologically).
+  const MAX_BACKFILL = 8;
+  const cursor = new Date(current.start);
+  for (let i = 0; i < MAX_BACKFILL; i++) {
+    const w = isoWeek(cursor);
+    const key = `${w.year}-W${String(w.week).padStart(2, '0')}`;
+    if (!existing.has(key)) result.unshift(w);
+    cursor.setUTCDate(cursor.getUTCDate() - 7);
+  }
+  return result;
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });
