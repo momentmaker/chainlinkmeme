@@ -102,12 +102,14 @@ interface Comet { x: number; y: number; vx: number; vy: number; age: number; lif
 
 function generateStars(w: number, h: number, count: number): Star[] {
   const stars: Star[] = [];
-  // Cover 1.5× the viewport so moderate pan doesn't reveal empty edges.
-  const W = w * 1.5, H = h * 1.5;
+  // Stars are wrapped back into [0, w) × [0, h) at draw time via modulo,
+  // so the initial placement range doesn't need to be larger than the
+  // viewport — starting with a uniform distribution across the visible
+  // canvas gets the same result with less surprise.
   for (let i = 0; i < count; i++) {
     stars.push({
-      x: Math.random() * W - W * 0.25,
-      y: Math.random() * H - H * 0.25,
+      x: Math.random() * w,
+      y: Math.random() * h,
       depth: Math.random(),  // 0 = far, 1 = near
       size: 0.4 + Math.random() * 1.4,
       phase: Math.random() * Math.PI * 2,
@@ -179,6 +181,10 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
   // comets. All regenerated or advanced inside the draw loop.
   const starsRef = useRef<Star[]>([]);
   const nebulaeRef = useRef<Nebula[]>([]);
+  // Gradients are expensive to allocate and don't need to change once the
+  // canvas is sized — bake them once per resize and reuse every frame,
+  // modulating "breath" with globalAlpha at draw time.
+  const nebulaGradientsRef = useRef<CanvasGradient[]>([]);
   const cometsRef = useRef<Comet[]>([]);
 
   useEffect(() => {
@@ -303,6 +309,12 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
       // empty patches after a viewport change.
       starsRef.current = generateStars(rect.width, rect.height, starCount);
       nebulaeRef.current = generateNebulae(rect.width, rect.height);
+      nebulaGradientsRef.current = nebulaeRef.current.map((n) => {
+        const g = ctx!.createRadialGradient(n.x * rect.width, n.y * rect.height, 0, n.x * rect.width, n.y * rect.height, n.radius);
+        g.addColorStop(0, `rgba(${n.rgb}, 1)`);
+        g.addColorStop(1, `rgba(${n.rgb}, 0)`);
+        return g;
+      });
       markDirty();
     }
     resize();
@@ -344,18 +356,23 @@ export default function Constellation({ manifestUrl = '/manifest.json' }: Props)
       ctx!.clearRect(0, 0, canvas!.width, canvas!.height);
       ctx!.setTransform(currentDpr, 0, 0, currentDpr, 0, 0);
 
-      for (const n of nebulaeRef.current) {
+      // Reuse the pre-baked gradients; only the breath-modulated alpha
+      // changes per frame, and globalAlpha handles that without a new
+      // allocation.
+      const nebulae = nebulaeRef.current;
+      const nebulaGradients = nebulaGradientsRef.current;
+      for (let i = 0; i < nebulae.length; i++) {
+        const n = nebulae[i]!;
+        const grad = nebulaGradients[i];
+        if (!grad) continue;
         const breath = enableBreath
           ? n.baseAlpha * (0.75 + 0.25 * Math.sin(t * n.breathSpeed + n.breathPhase))
           : n.baseAlpha;
-        const cx = n.x * w;
-        const cy = n.y * h;
-        const grad = ctx!.createRadialGradient(cx, cy, 0, cx, cy, n.radius);
-        grad.addColorStop(0, `rgba(${n.rgb}, ${breath.toFixed(3)})`);
-        grad.addColorStop(1, `rgba(${n.rgb}, 0)`);
+        ctx!.globalAlpha = breath;
         ctx!.fillStyle = grad;
         ctx!.fillRect(0, 0, w, h);
       }
+      ctx!.globalAlpha = 1;
 
       // --- Layer 2: starfield with parallax + twinkle (screen space) ---
       for (const s of starsRef.current) {
