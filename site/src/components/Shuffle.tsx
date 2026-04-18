@@ -88,6 +88,13 @@ export default function Shuffle({ manifestUrl = '/manifest.json' }: Props) {
     const onKey = (e: KeyboardEvent): void => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // When focus sits on a button or link (e.g. the overlay's close button
+      // after aria-modal focus transfer), the native element already handles
+      // Space/Enter as activation. Intercepting them here causes a double-
+      // fire: advance() + button-click would both run. Only Escape needs our
+      // override in that case.
+      const onInteractive = e.target instanceof HTMLButtonElement || e.target instanceof HTMLAnchorElement;
+      if (onInteractive && e.key !== 'Escape') return;
       if (!openRef.current) {
         if (e.key === 's' || e.key === 'S') {
           e.preventDefault();

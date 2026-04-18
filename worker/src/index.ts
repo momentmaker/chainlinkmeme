@@ -178,7 +178,10 @@ export default {
     if (path === '/api/random' && request.method === 'GET') {
       try {
         const m = await loadApiManifest(env.SITE_ORIGIN);
-        const tagFilter = url.searchParams.get('tag')?.toLowerCase() ?? null;
+        // Empty `?tag=` → same as no filter. Otherwise `x.tags.includes("")`
+        // is always false and the endpoint would 404 for a client that
+        // passed an empty tag param by accident.
+        const tagFilter = url.searchParams.get('tag')?.trim().toLowerCase() || null;
         const pool = tagFilter
           ? m.memes.filter((x) => x.tags.includes(tagFilter))
           : m.memes;
