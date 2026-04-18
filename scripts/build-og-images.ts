@@ -379,6 +379,14 @@ async function main() {
   // fresh mtimes, so the old "out newer than src" check would force a full
   // re-render every CI run. The cache key already invalidates when design or
   // content changes.
+  //
+  // ⚠ If you change the visual design of renderCard (layout, colors, fonts,
+  // hexImg, anything that alters existing PNGs), you MUST bump the cache-key
+  // prefix in .github/workflows/deploy.yml (currently og-v2-). Otherwise
+  // restore-keys will pull in pre-change PNGs, this skip-on-exists check
+  // will short-circuit every meme, and the new design won't reach
+  // production for any meme whose TOML wasn't also edited. Ask me how I
+  // know.
   let rendered = 0;
   let skipped = 0;
   for (const meme of manifest.memes) {
