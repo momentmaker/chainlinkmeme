@@ -899,6 +899,7 @@ function KeyboardHelp({ onClose }: { onClose: () => void }) {
           <dt>f</dt><dd>favorite focused</dd>
           <dt>c</dt><dd>copy permalink</dd>
           <dt>r</dt><dd>random meme</dd>
+          <dt>s</dt><dd>shuffle mode (fullscreen)</dd>
           <dt>← / →</dt><dd>step through in modal</dd>
           <dt>?</dt><dd>this help</dd>
           <dt>Esc</dt><dd>close / unfocus</dd>

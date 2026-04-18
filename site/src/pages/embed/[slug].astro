@@ -1,0 +1,75 @@
+---
+import { memeUrl, permalinkUrl } from '../../lib/meme-url';
+import type { Manifest, MemeEntry } from '../../lib/manifest';
+
+export async function getStaticPaths() {
+  const m = (await import('../../../public/manifest.json')) as { default: Manifest };
+  return m.default.memes.map((meme) => ({
+    params: { slug: meme.slug },
+    props: { meme },
+  }));
+}
+
+const { meme } = Astro.props as { meme: MemeEntry };
+
+const HASH_RE = /^[0-9a-f]{10,}$/i;
+const displayTitle = meme.title && !HASH_RE.test(meme.title)
+  ? meme.title
+  : (meme.tags[0] ? `#${meme.tags[0]}` : 'chainlink meme');
+
+const canonical = permalinkUrl(meme.slug);
+---
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{displayTitle} — chainlink meme</title>
+    <link rel="canonical" href={canonical} />
+    <meta name="robots" content="noindex" />
+    <style>
+      html, body { margin: 0; padding: 0; background: transparent; font-family: -apple-system, system-ui, sans-serif; }
+      body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+      a.embed-link {
+        display: block;
+        position: relative;
+        max-width: 100%;
+        max-height: 100vh;
+        text-decoration: none;
+        color: inherit;
+      }
+      a.embed-link img {
+        display: block;
+        max-width: 100%;
+        max-height: 100vh;
+        width: auto;
+        height: auto;
+        border-radius: 8px;
+      }
+      .embed-footer {
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
+        padding: 4px 10px;
+        background: rgba(15, 23, 42, 0.72);
+        color: rgba(255, 255, 255, 0.9);
+        font-family: Menlo, Monaco, monospace;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        border-radius: 999px;
+        backdrop-filter: blur(4px);
+        opacity: 0;
+        transition: opacity 0.15s ease;
+      }
+      a.embed-link:hover .embed-footer,
+      a.embed-link:focus .embed-footer { opacity: 1; }
+      @media (hover: none) { .embed-footer { opacity: 1; } }
+    </style>
+  </head>
+  <body>
+    <a class="embed-link" href={canonical} target="_blank" rel="noopener">
+      <img src={memeUrl(meme.filename)} alt={meme.title || meme.slug} />
+      <span class="embed-footer">⬢ chainlinkme.me</span>
+    </a>
+  </body>
+</html>

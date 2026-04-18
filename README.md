@@ -86,6 +86,27 @@ Each permalink page has a **save as sticker** button that renders the meme to a 
 ### OG images
 Every meme has a pre-rendered 1200×630 OG card (baked by `scripts/build-og-images.ts` with Satori + Resvg, CI-cached by content hash). The home page has a custom 77-meme honeycomb mosaic.
 
+### Honeycomb grid (`/grid`)
+Every meme in the archive, at once, as a single hex tessellation. Wheel to zoom, drag to pan, click any tile to open.
+
+### Shuffle mode (keyboard-only)
+Press `s` anywhere on the site for fullscreen one-meme-at-a-time mode. Space / → for next, ← for previous, Esc to exit. Unlisted — find it in the `?` help dialog.
+
+### Public API
+The canonical data source is [`manifest.json`](https://chainlinkme.me/manifest.json) — the full archive, CORS-open, regenerated on every deploy. Worker endpoints on top of it:
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/random` | JSON for a random meme. `?tag=xxx` filters by tag. `?redirect=1` returns a 302 to the permalink. |
+| `GET /api/search?q=...` | Tag + synonym + title/description search. `&limit=N` (default 24, max 100). |
+| `GET /api/tags` | Every tag with its meme count, sorted by popularity. |
+| `GET /api/reactions` | Bulk `{ slug: { heart, laugh, bolt, diamond } }` map (edge-cached 60s). |
+
+Worker base URL: `https://chainlinkmeme-api.pilgrim.workers.dev`.
+
+### Embed widget
+Each permalink has a **copy embed** button that gives you an `<iframe>` snippet you can drop into blogs, Notion, Discord embeds, etc. The embed page lives at `/embed/:slug`.
+
 ## Develop locally
 
 ```sh

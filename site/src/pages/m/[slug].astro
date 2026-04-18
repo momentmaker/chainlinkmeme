@@ -96,6 +96,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
       <div class="permalink-actions">
         <button type="button" class="btn ghost" data-download data-url={memeUrl(meme.filename)} data-filename={meme.filename}>download</button>
         <button type="button" class="btn ghost" data-sticker data-url={memeUrl(meme.filename)} data-slug={meme.slug} data-animated={meme.animated ? '1' : '0'}>save as sticker</button>
+        <button type="button" class="btn ghost" data-embed data-embed-url={`${siteUrl}${base}/embed/${meme.slug}/`} data-permalink-url={`${siteUrl}${Astro.url.pathname}`} data-slug={meme.slug}>copy embed</button>
         <a class="btn ghost"
            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(displayTitle + ' — chainlinkme.me')}&url=${encodeURIComponent(siteUrl + Astro.url.pathname)}`}
            target="_blank" rel="noopener">share →</a>
@@ -304,12 +305,37 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
       });
     }
 
+    function wireEmbed() {
+      const btn = document.querySelector<HTMLButtonElement>('[data-embed]');
+      if (!btn || btn.dataset.bound) return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', async () => {
+        const embedUrl = btn.dataset.embedUrl;
+        const permalinkUrl = btn.dataset.permalinkUrl;
+        const slug = btn.dataset.slug;
+        if (!embedUrl || !permalinkUrl) return;
+        const original = btn.textContent ?? 'copy embed';
+        const snippet = `<iframe src="${embedUrl}" width="500" height="500" frameborder="0" loading="lazy" title="chainlink meme ${slug ?? ''}" style="border:0;max-width:100%"></iframe>`;
+        try {
+          await navigator.clipboard.writeText(snippet);
+          const w = window as unknown as { umami?: { track: (n: string, d?: Record<string, unknown>) => void } };
+          w.umami?.track('embed-copy', { slug });
+          btn.textContent = '✓ copied embed code';
+        } catch {
+          btn.textContent = '✗ copy failed';
+        }
+        setTimeout(() => { btn.textContent = original; }, 1800);
+      });
+    }
+
     wirePermalinkActions();
     wireSticker();
+    wireEmbed();
     wirePermalinkTilt();
     document.addEventListener('astro:page-load', () => {
       wirePermalinkActions();
       wireSticker();
+      wireEmbed();
       wirePermalinkTilt();
     });
   </script>

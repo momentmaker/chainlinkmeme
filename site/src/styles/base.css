@@ -1186,6 +1186,115 @@ a:hover { text-decoration: underline; }
 }
 .constellation-reset:hover { border-color: var(--brand-blue); color: white; }
 
+/* Honeycomb grid page — every meme as a hex tile */
+.grid-hex {
+  position: relative;
+  width: 100%;
+  height: 78vh;
+  min-height: 560px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(47, 98, 223, 0.08) 0%, transparent 70%),
+    var(--card-bg);
+  overflow: hidden;
+}
+.grid-hex-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.grid-hex-canvas:active { cursor: grabbing; }
+
+/* Shuffle overlay — fullscreen one-meme-at-a-time mode.
+   Activated by pressing `s` anywhere on the site. Hidden from the UI
+   so only keyboard-aware users discover it. */
+.shuffle-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(8, 12, 22, 0.96);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: shuffle-fade 0.2s ease-out;
+}
+@keyframes shuffle-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.shuffle-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(15, 23, 42, 0.75);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: border-color 0.15s ease;
+}
+.shuffle-close:hover { border-color: var(--brand-blue); }
+.shuffle-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  max-width: 100%;
+  max-height: 100%;
+  cursor: pointer;
+}
+.shuffle-image {
+  max-width: min(92vw, 1100px);
+  max-height: 78vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: shuffle-in 0.25s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes shuffle-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+.shuffle-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.9);
+}
+.shuffle-title {
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 18px;
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s ease;
+}
+.shuffle-title:hover { border-bottom-color: var(--brand-blue); }
+.shuffle-hint {
+  margin: 0;
+  font-family: Menlo, Monaco, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.5);
+}
+.shuffle-preload {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.shuffle-loading {
+  color: rgba(255, 255, 255, 0.7);
+  font-family: Menlo, Monaco, monospace;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
 /* Weekly stack pages */
 .weekly, .weekly-index { max-width: 880px; margin: 0 auto; }
 .weekly-header { text-align: center; margin-bottom: 40px; }
