@@ -169,7 +169,14 @@ export default {
       const picked = pool[Math.floor(Math.random() * pool.length)]!;
       const ref = m.repo_ref || 'main';
       if (url.searchParams.get('redirect') === '1') {
-        return Response.redirect(`${env.SITE_ORIGIN}/m/${picked.slug}/`, 302);
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: `${env.SITE_ORIGIN}/m/${picked.slug}/`,
+            'Cache-Control': 'no-store',
+            ...corsHeaders,
+          },
+        });
       }
       return json(shapeMeme(picked, env.SITE_ORIGIN, ref), {
         headers: { 'Cache-Control': 'no-store' },

@@ -73,6 +73,15 @@ export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
   const loadingRef = useRef<Set<string>>(new Set());
   const failedRef = useRef<Set<string>>(new Set());
   const markDirtyRef = useRef<() => void>(() => {});
+  // Mirror hoverTile in a ref so the raf loop can read it without the effect
+  // needing hoverTile in its deps. Without this, every mouse move tears down
+  // the raf loop + wheel/pointer listeners and rebuilds them — same pattern
+  // Constellation.tsx calls out and avoids.
+  const hoverTileRef = useRef<Tile | null>(null);
+  useEffect(() => {
+    hoverTileRef.current = hoverTile;
+    markDirtyRef.current();
+  }, [hoverTile]);
 
   useEffect(() => {
     let cancelled = false;
@@ -215,8 +224,9 @@ export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
         ctx!.stroke();
       }
 
-      if (hoverTile) {
-        hexPath(ctx!, hoverTile.x, hoverTile.y, TILE_R + 1.5);
+      const currentHover = hoverTileRef.current;
+      if (currentHover) {
+        hexPath(ctx!, currentHover.x, currentHover.y, TILE_R + 1.5);
         ctx!.strokeStyle = 'rgba(255, 255, 255, 0.95)';
         ctx!.lineWidth = 2.5 / v.scale;
         ctx!.shadowColor = 'rgba(110, 155, 255, 0.9)';
@@ -312,7 +322,7 @@ export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
       canvas.removeEventListener('pointerup', onPointerUp);
       canvas.removeEventListener('pointercancel', onPointerUp);
     };
-  }, [layout, hoverTile]);
+  }, [layout]);
 
   const resetView = (): void => {
     const wrapper = wrapperRef.current;

@@ -29,8 +29,18 @@ export default function Shuffle({ manifestUrl = '/manifest.json' }: Props) {
   const [cursor, setCursor] = useState(-1);
   const manifestRef = useRef<Manifest | null>(null);
   const loadingRef = useRef(false);
+  // Mirror `open`, `history.length`, and `cursor` into refs so the keydown
+  // listener can read fresh values without re-binding on every change. Without
+  // this, advancing rebinds the window listener per navigation — harmless but
+  // wasteful, and obscures the lifecycle.
+  const openRef = useRef(false);
+  const historyLenRef = useRef(0);
+  const cursorRef = useRef(-1);
 
   useEffect(() => { manifestRef.current = manifest; }, [manifest]);
+  useEffect(() => { openRef.current = open; }, [open]);
+  useEffect(() => { historyLenRef.current = history.length; }, [history.length]);
+  useEffect(() => { cursorRef.current = cursor; }, [cursor]);
 
   const loadManifest = useCallback(async (): Promise<Manifest | null> => {
     if (manifestRef.current) return manifestRef.current;
@@ -66,22 +76,19 @@ export default function Shuffle({ manifestUrl = '/manifest.json' }: Props) {
     setCursor((c) => Math.max(0, c - 1));
   }, []);
   const stepForward = useCallback((): void => {
-    setCursor((c) => {
-      if (c < history.length - 1) return c + 1;
-      return c;
-    });
-  }, [history.length]);
+    setCursor((c) => (c < historyLenRef.current - 1 ? c + 1 : c));
+  }, []);
 
   const openShuffle = useCallback(async (): Promise<void> => {
     setOpen(true);
-    if (history.length === 0) await advance();
-  }, [advance, history.length]);
+    if (historyLenRef.current === 0) await advance();
+  }, [advance]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (!open) {
+      if (!openRef.current) {
         if (e.key === 's' || e.key === 'S') {
           e.preventDefault();
           void openShuffle();
@@ -91,7 +98,7 @@ export default function Shuffle({ manifestUrl = '/manifest.json' }: Props) {
       if (e.key === 'Escape') { e.preventDefault(); setOpen(false); return; }
       if (e.key === ' ' || e.key === 'ArrowRight' || e.key === 'l' || e.key === 'j' || e.key === 's' || e.key === 'S') {
         e.preventDefault();
-        if (cursor < history.length - 1) stepForward();
+        if (cursorRef.current < historyLenRef.current - 1) stepForward();
         else void advance();
         return;
       }
@@ -103,7 +110,7 @@ export default function Shuffle({ manifestUrl = '/manifest.json' }: Props) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, cursor, history.length, openShuffle, advance, stepBack, stepForward]);
+  }, [openShuffle, advance, stepBack, stepForward]);
 
   useEffect(() => {
     if (!open) return;
