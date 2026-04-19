@@ -158,6 +158,16 @@ type InlineResult =
   | { type: 'photo'; id: string; caption: string; title: string; thumbnail_url: string; photo_url: string }
   | { type: 'gif';   id: string; caption: string; title: string; thumbnail_url: string; gif_url: string };
 
+// Telegram's inline API is strict about media formats in ways sendPhoto/
+// sendAnimation are not: InlineQueryResultPhoto.photo_url must point to a
+// JPEG, and some macOS clients crash outright when given a PNG. We skip
+// non-JPEG statics here so the picker stays safe. Animated memes must be
+// actual .gif to satisfy InlineQueryResultGif.
+function inlineSafe(m: ManifestMeme): boolean {
+  const ext = m.filename.toLowerCase().split('.').pop() ?? '';
+  return m.animated ? ext === 'gif' : (ext === 'jpg' || ext === 'jpeg');
+}
+
 function buildInlineResult(meme: ManifestMeme, siteOrigin: string): InlineResult {
   const permalink = `${siteOrigin}/m/${meme.slug}/`;
   const caption = captionFor(meme, permalink);
@@ -182,7 +192,8 @@ async function handleInline(inlineQueryId: string, query: string, env: TelegramE
     });
   }
 
-  const memes = pickMemes(manifest, query, INLINE_RESULT_LIMIT);
+  const safeManifest: Manifest = { ...manifest, memes: manifest.memes.filter(inlineSafe) };
+  const memes = pickMemes(safeManifest, query, INLINE_RESULT_LIMIT);
   const results = memes.map((m) => buildInlineResult(m, env.SITE_ORIGIN));
   return tgReply('answerInlineQuery', {
     inline_query_id: inlineQueryId,
