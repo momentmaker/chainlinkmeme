@@ -154,15 +154,9 @@ async function handleClmeme(
 const INLINE_RESULT_LIMIT = 20;
 const INLINE_CACHE_SECONDS = 60;
 
-interface InlineResult {
-  type: 'photo' | 'gif';
-  id: string;
-  caption: string;
-  title: string;
-  thumbnail_url: string;
-  photo_url?: string;
-  gif_url?: string;
-}
+type InlineResult =
+  | { type: 'photo'; id: string; caption: string; title: string; thumbnail_url: string; photo_url: string }
+  | { type: 'gif';   id: string; caption: string; title: string; thumbnail_url: string; gif_url: string };
 
 function buildInlineResult(meme: ManifestMeme, siteOrigin: string): InlineResult {
   const permalink = `${siteOrigin}/m/${meme.slug}/`;
