@@ -196,11 +196,10 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
       }
     }
 
-    // Save-as-sticker: resize the meme to 512x512 WebP (or PNG fallback) in
-    // the browser via canvas, then trigger a download. That's the exact
-    // format Telegram/Discord/Slack expect for custom stickers. For animated
-    // GIFs we hand back the raw file — static sticker packs can't encode
-    // animation without a full .tgs pipeline, which isn't worth the weight.
+    // Save-as-sticker: hand off to the sticker encoder module, which is
+    // dynamically imported so its UPNG + pako bundle (~95KB) only loads
+    // when a user clicks. Static images → 512×512 WebP; animated GIFs →
+    // 512×512 APNG (covers Discord, Signal, generic web embed).
     function wireSticker() {
       const btn = document.querySelector<HTMLButtonElement>('[data-sticker]');
       if (!btn || btn.dataset.bound) return;
@@ -216,52 +215,15 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
         const w = window as unknown as { umami?: { track: (n: string, d?: Record<string, unknown>) => void } };
         w.umami?.track('sticker-save', { slug, animated });
         try {
-          if (animated) {
-            const res = await fetch(url, { mode: 'cors' });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const blob = await res.blob();
-            const obj = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = obj;
-            a.download = `${slug}-sticker.gif`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            setTimeout(() => URL.revokeObjectURL(obj), 1000);
-            btn.textContent = '✓ saved (gif)';
+          const mod = await import('../../lib/sticker');
+          const { oversize, blob, maxBytes } = await mod.saveAsSticker({ url, slug, animated });
+          if (oversize) {
+            const kb = Math.round(blob.size / 1024);
+            const limitKb = Math.round(maxBytes / 1024);
+            btn.textContent = `saved (${kb}KB — over ${limitKb}KB limit)`;
+            w.umami?.track('sticker-oversize', { slug, kb, limitKb });
           } else {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            await new Promise<void>((resolve, reject) => {
-              img.onload = () => resolve();
-              img.onerror = () => reject(new Error('image load failed'));
-              img.src = url;
-            });
-            const canvas = document.createElement('canvas');
-            canvas.width = 512;
-            canvas.height = 512;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) throw new Error('no 2d context');
-            // Cover-fit centered: fills the square with the longer side
-            // cropped. Matches sticker platform conventions.
-            const scale = Math.max(512 / img.width, 512 / img.height);
-            const drawW = img.width * scale;
-            const drawH = img.height * scale;
-            const dx = (512 - drawW) / 2;
-            const dy = (512 - drawH) / 2;
-            ctx.imageSmoothingQuality = 'high';
-            ctx.drawImage(img, dx, dy, drawW, drawH);
-            const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', 0.92));
-            if (!blob) throw new Error('toBlob failed');
-            const obj = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = obj;
-            a.download = `${slug}-sticker.webp`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            setTimeout(() => URL.revokeObjectURL(obj), 1000);
-            btn.textContent = '✓ saved';
+            btn.textContent = animated ? '✓ saved (apng)' : '✓ saved';
           }
         } catch (err) {
           // Most likely culprit: a CDN edge stripped CORS headers so the
