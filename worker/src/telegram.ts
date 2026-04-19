@@ -48,9 +48,9 @@ function ignore(): Response {
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  let mismatch = a.length ^ b.length;
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return mismatch === 0;
 }
 

@@ -25,7 +25,7 @@
       "chat": { "id": 777, "type": "private" },
       "date": 1712000000,
       "text": "/clmeme sergey",
-      "entities": [{ "type": "bot_command", "offset": 0, "length": 8 }]
+      "entities": [{ "type": "bot_command", "offset": 0, "length": 7 }]
     }
   },
   "command_clmeme_group_suffix": {
@@ -78,7 +78,7 @@
       "chat": { "id": 777, "type": "private" },
       "date": 1712000000,
       "text": "/clmeme zzznomatchxyz",
-      "entities": [{ "type": "bot_command", "offset": 0, "length": 8 }]
+      "entities": [{ "type": "bot_command", "offset": 0, "length": 7 }]
     }
   }
 }
