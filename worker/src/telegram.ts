@@ -123,11 +123,14 @@ async function handleClmeme(
 
   const meme = pickMeme(manifest, query);
   if (!meme) {
+    // Plain text, no parse_mode — the user's query is interpolated here, and
+    // Markdown metachars (`*`, `_`, `` ` ``, `[`) in a query like `/clmeme *`
+    // would produce malformed Markdown and get the whole message silently
+    // rejected by Telegram.
     return tgReply('sendMessage', {
       chat_id: chatId,
       reply_parameters: { message_id: replyTo },
-      parse_mode: 'Markdown',
-      text: `no match for **${query}**. try \`sergey\`, \`moon\`, \`wagmi\`…`,
+      text: `no match for "${query}". try sergey, moon, wagmi…`,
     });
   }
 
