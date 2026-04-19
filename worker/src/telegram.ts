@@ -178,19 +178,26 @@ interface InlinePhotoResult {
 // (60% of our archive's GIFs exceed this and also crash the macOS client).
 // Until the manifest records file sizes we skip animated memes entirely
 // from inline results — /clmeme still serves GIFs via sendAnimation, which
-// has no 1MB limit. Callers of buildInlineResult must pre-filter with this.
+// has no 1MB limit.
+// PNG memes have JPEG siblings pre-generated into memes/inline/ (see
+// scripts/build-inline-jpegs.ts); the manifest records them as
+// inline_filename. Callers of buildInlineResult must pre-filter with this.
+function inlineFilename(m: ManifestMeme): string {
+  return m.inline_filename ?? m.filename;
+}
+
 function inlineSafe(m: ManifestMeme): boolean {
   if (m.animated) return false;
-  const ext = m.filename.toLowerCase().split('.').pop() ?? '';
+  const ext = inlineFilename(m).toLowerCase().split('.').pop() ?? '';
   return ext === 'jpg' || ext === 'jpeg';
 }
 
-// Precondition: caller has filtered with inlineSafe (photo-only).
+// Precondition: caller has filtered with inlineSafe (photo-only, JPEG URL).
 function buildInlineResult(meme: ManifestMeme, siteOrigin: string): InlinePhotoResult {
   const permalink = `${siteOrigin}/m/${meme.slug}/`;
   const caption = captionFor(meme, permalink);
   const title = displayTitle(meme);
-  const url = memeCdnUrl(meme.filename);
+  const url = memeCdnUrl(inlineFilename(meme));
   return { type: 'photo', id: meme.slug, photo_url: url, thumbnail_url: url, title, caption };
 }
 

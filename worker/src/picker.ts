@@ -8,6 +8,10 @@ export interface ManifestMeme {
   title: string;
   tags: string[];
   animated: boolean;
+  // Pre-generated JPEG sibling for PNG memes — used by Telegram's inline
+  // mode, which requires JPEG for InlineQueryResultPhoto. Optional: only
+  // set when scripts/build-inline-jpegs.ts has produced memes/inline/<slug>.jpg.
+  inline_filename?: string;
 }
 
 export interface Manifest {

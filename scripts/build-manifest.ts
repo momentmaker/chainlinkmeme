@@ -114,6 +114,16 @@ function main() {
     const filePath = path.join(MEMES_DIR, name);
     const { width, height } = readImageSize(filePath);
 
+    // Telegram's inline API requires JPEG for photo results — PNGs crash
+    // some clients. scripts/build-inline-jpegs.ts pre-generates JPEG
+    // siblings into memes/inline/. Record the sibling when one exists so
+    // the bot can prefer it for inline results.
+    let inline_filename: string | undefined;
+    if (ext === '.png') {
+      const sibling = path.join(MEMES_DIR, 'inline', `${slug}.jpg`);
+      if (fs.existsSync(sibling)) inline_filename = `inline/${slug}.jpg`;
+    }
+
     for (const t of tags) allTags.add(t);
     memes.push({
       slug,
@@ -130,6 +140,7 @@ function main() {
       animated: ANIMATED_EXTS.has(ext),
       width,
       height,
+      ...(inline_filename ? { inline_filename } : {}),
     });
   }
 
