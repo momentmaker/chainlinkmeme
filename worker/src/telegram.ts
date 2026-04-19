@@ -211,12 +211,7 @@ async function handleInline(inlineQueryId: string, query: string, env: TelegramE
   });
 }
 
-export async function handleTelegramUpdate(request: Request, env: TelegramEnv): Promise<Response> {
-  const secret = request.headers.get('x-telegram-bot-api-secret-token');
-  if (!secret || !timingSafeEqual(secret, env.TELEGRAM_WEBHOOK_SECRET)) {
-    return new Response('unauthorized', { status: 401 });
-  }
-
+async function dispatchTelegramUpdate(request: Request, env: TelegramEnv): Promise<Response> {
   let update: TgUpdate;
   try {
     update = (await request.json()) as TgUpdate;
@@ -243,4 +238,21 @@ export async function handleTelegramUpdate(request: Request, env: TelegramEnv): 
   }
 
   return ignore();
+}
+
+export async function handleTelegramUpdate(request: Request, env: TelegramEnv): Promise<Response> {
+  const secret = request.headers.get('x-telegram-bot-api-secret-token');
+  if (!secret || !timingSafeEqual(secret, env.TELEGRAM_WEBHOOK_SECRET)) {
+    return new Response('unauthorized', { status: 401 });
+  }
+  try {
+    return await dispatchTelegramUpdate(request, env);
+  } catch (err) {
+    // Any uncaught throw here would bubble to a 500, which Telegram retries
+    // up to 3 times over 24 hours — replaying the same command to the same
+    // chat. Swallowing to 200-null breaks that feedback loop. Workers Logs
+    // still captures the stack (observability is enabled in wrangler.toml).
+    console.error('[telegram] uncaught:', err);
+    return ignore();
+  }
 }
