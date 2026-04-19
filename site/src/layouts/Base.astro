@@ -3,6 +3,8 @@ import '../styles/base.css';
 import '../styles/theme-dark.css';
 import { ClientRouter } from 'astro:transitions';
 import Shuffle from '../components/Shuffle';
+import manifestJson from '../../public/manifest.json';
+import type { Manifest } from '../lib/manifest';
 
 export interface Props {
   title: string;
@@ -16,9 +18,11 @@ const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://momentmake
 const fullCanonical = canonical ?? siteUrl + Astro.url.pathname;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const manifestHref = `${base}/manifest.json`;
-// Emit og:image only when a real per-page image exists. The OG build step
-// generates one per permalink; the home page will get a default hero later.
-const fullOg = ogImage ?? null;
+// Pages without their own OG (grid/map/week-index/contribute, plus quiet-week
+// snapshots) fall back to the home hero, cache-busted by the manifest date so
+// unfurls refresh per deploy. Per-page OGs override by passing ogImage.
+const lastBuilt = (manifestJson as Manifest).generated_at?.slice(0, 10) || 'initial';
+const fullOg = ogImage ?? `${siteUrl}/og/_home.png?v=${encodeURIComponent(lastBuilt)}`;
 ---
 <!DOCTYPE html>
 <html lang="en">
@@ -36,14 +40,14 @@ const fullOg = ogImage ?? null;
 
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    {fullOg && <meta property="og:image" content={fullOg} />}
+    <meta property="og:image" content={fullOg} />
     <meta property="og:url" content={fullCanonical} />
     <meta property="og:type" content="website" />
 
-    <meta name="twitter:card" content={fullOg ? 'summary_large_image' : 'summary'} />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    {fullOg && <meta name="twitter:image" content={fullOg} />}
+    <meta name="twitter:image" content={fullOg} />
 
     <script is:inline>
       // Apply stored theme before first paint to avoid FOUC, and re-apply
