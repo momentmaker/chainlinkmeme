@@ -1,62 +1,116 @@
 ---
 import Base from '../layouts/Base.astro';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+const steps = [
+  {
+    n: '01',
+    title: 'fork the repo',
+    body: 'One-click on GitHub — no account beyond it.',
+    href: 'https://github.com/momentmaker/chainlinkmeme/fork',
+  },
+  {
+    n: '02',
+    title: 'drop two files into memes/',
+    body: 'yourmeme.{jpg,gif,png,webp} + yourmeme.toml. Same basename.',
+  },
+  {
+    n: '03',
+    title: 'fill out the TOML',
+    body: 'Tags are required and must live in memes/_vocab.toml. Title + credit are optional but encouraged.',
+  },
+  {
+    n: '04',
+    title: 'open a PR',
+    body: 'CI validates schema, vocab, uniqueness, and file size automatically.',
+  },
+  {
+    n: '05',
+    title: 'merge + live',
+    body: 'A maintainer merges; your meme is on the archive in ~60 seconds.',
+  },
+];
+
+const rules = [
+  'only submit memes you have the right to share',
+  'on-topic: chainlink-flavored culture, not generic crypto',
+  'no hate, harassment, explicit content, or personal info about non-public people',
+  'compress files over 5 MB before committing',
+  'filename must be lowercase [a-z0-9_], unique across the archive',
+];
 ---
 <Base
   title="contribute — chainlink meme"
   description="how to add a meme to the community-curated chainlink meme archive"
 >
-  <article class="permalink" style="max-width: 720px;">
-    <h1 class="permalink-title">⬢ contribute a meme</h1>
+  <article class="contribute">
+    <header class="contribute-header">
+      <p class="contribute-eyebrow">⬡ contribute</p>
+      <h1 class="contribute-title">ship a meme</h1>
+      <p class="contribute-sub">
+        The archive is a git repo. Add a file, open a PR, it's live — no account beyond GitHub, no
+        upload form, no middleman.
+      </p>
+    </header>
 
-    <p>
-      Anyone can submit a meme via a pull request. No account beyond GitHub. No upload form. Just commit a file.
-    </p>
+    <section class="contribute-section">
+      <p class="contribute-section-eyebrow">⬢ the flow</p>
+      <ol class="contribute-steps">
+        {steps.map((s) => (
+          <li class="contribute-step">
+            <span class="contribute-step-rank">{s.n}</span>
+            <div class="contribute-step-body">
+              {s.href ? (
+                <a class="contribute-step-title" href={s.href} target="_blank" rel="noopener">
+                  {s.title} <span aria-hidden="true">↗</span>
+                </a>
+              ) : (
+                <span class="contribute-step-title">{s.title}</span>
+              )}
+              <p class="contribute-step-text">{s.body}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
 
-    <h2>the flow</h2>
-    <ol>
-      <li><a href="https://github.com/momentmaker/chainlinkmeme">fork the repo</a></li>
-      <li>drop <code>yourmeme.jpg</code> + <code>yourmeme.toml</code> into the <code>memes/</code> folder</li>
-      <li>fill out the TOML (tags, optional title + credit)</li>
-      <li>open a PR — CI validates your submission</li>
-      <li>a maintainer reviews, merges. Your meme is live in ~60s.</li>
-    </ol>
+    <section class="contribute-section">
+      <p class="contribute-section-eyebrow">⬢ toml schema</p>
+      <pre class="contribute-code"><code><span class="tok-comment"># memes/sergey_moon.toml</span>
 
-    <h2>TOML schema</h2>
-    <pre style="background:#f6f8fa;padding:14px;border-radius:6px;overflow:auto;font-family:Menlo,monospace;font-size:12px;line-height:1.5;"><code>{`# memes/sergey_moon.toml
+<span class="tok-comment"># required — all tags must be in memes/_vocab.toml</span>
+<span class="tok-key">tags</span> = [<span class="tok-string">"sergey"</span>, <span class="tok-string">"moon"</span>, <span class="tok-string">"wagmi"</span>]
 
-# required — all tags must be in memes/_vocab.toml
-tags = ["sergey", "moon", "wagmi"]
+<span class="tok-comment"># encouraged</span>
+<span class="tok-key">title</span> = <span class="tok-string">"Sergey launches"</span>
 
-# encouraged
-title = "Sergey launches"
+<span class="tok-comment"># optional</span>
+<span class="tok-key">description</span> = <span class="tok-string">""</span>
+<span class="tok-key">credit</span> = <span class="tok-string">"@someone"</span>
+<span class="tok-key">source_url</span> = <span class="tok-string">""</span>
 
-# optional
-description = ""
-credit = "@someone"
-source_url = ""
+<span class="tok-comment"># auto-filled by CI on merge — leave blank</span>
+<span class="tok-key">submitted_by</span> = <span class="tok-string">""</span>
+<span class="tok-key">date_added</span> = <span class="tok-string">""</span>
+<span class="tok-key">nsfw</span> = <span class="tok-bool">false</span></code></pre>
+    </section>
 
-# auto-filled by CI on merge — leave blank
-submitted_by = ""
-date_added = ""
-nsfw = false`}</code></pre>
+    <section class="contribute-section">
+      <p class="contribute-section-eyebrow">⬢ rules</p>
+      <ul class="contribute-rules">
+        {rules.map((r) => <li>{r}</li>)}
+      </ul>
+    </section>
 
-    <h2>rules</h2>
-    <ul>
-      <li>only submit memes you have the right to share</li>
-      <li>on-topic: chainlink-flavored culture, not generic crypto</li>
-      <li>no hate, harassment, explicit content, or personal info about non-public people</li>
-      <li>compress files over 5 MB before committing</li>
-      <li>filename must be lowercase, <code>[a-z0-9_]</code>, unique</li>
-    </ul>
-
-    <p style="margin-top: 32px;">
-      full guide →
+    <p class="contribute-fullguide">
+      full walkthrough →
       <a href="https://github.com/momentmaker/chainlinkmeme/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>
     </p>
 
-    <div class="permalink-actions">
-      <a class="btn" href="https://github.com/momentmaker/chainlinkmeme/fork">fork on github</a>
-      <a class="btn ghost" href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/`}>← back to gallery</a>
+    <div class="contribute-actions">
+      <a class="btn" href="https://github.com/momentmaker/chainlinkmeme/fork">fork on github ↗</a>
+      <a class="btn ghost" href={`${base}/`}>← back to gallery</a>
     </div>
   </article>
 </Base>

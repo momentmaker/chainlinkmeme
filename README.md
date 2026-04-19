@@ -76,12 +76,12 @@ Server admins only need `applications.commands` scope — no bot user, no gatewa
 Two GitHub-cron-driven bots broadcast the archive:
 
 - **Daily**: once a day at 14:00 UTC, `/tweet-daily` posts the meme-of-the-day — same meme the site's hero shows. Static memes post as a bare permalink so X unfurls the per-meme OG card; animated memes upload the GIF so it plays in-feed.
-- **Weekly**: every Monday 14:30 UTC, `/tweet-weekly` posts a thread — one opener + one reply per top-7 meme — pulled from the freshest `site/src/data/weekly/YYYY-Www.json` snapshot.
+- **Weekly**: every Monday 14:30 UTC, `/tweet-weekly` posts a single tweet linking to `/week/<key>/`. The per-week OG card (honeycomb of that week's top memes, baked by `scripts/build-og-images.ts`) does the visual work on unfurl. One tweet instead of eight — more thumb-stopping, less quota, and every post is a permanent archive artifact people can bookmark.
 
-~40 tweets/month total, well under X's Free-tier 500-post cap. No read endpoints are used, so nothing needs a paid plan. Secrets (`X_API_KEY` / `X_API_SECRET` / `X_ACCESS_TOKEN` / `X_ACCESS_SECRET`) live in GitHub Actions.
+Secrets (`X_API_KEY` / `X_API_SECRET` / `X_ACCESS_TOKEN` / `X_ACCESS_SECRET`) live in GitHub Actions.
 
 ### Sticker export
-Each permalink page has a **save as sticker** button that renders the meme to a 512×512 WebP — drop it straight into Telegram, Discord, or Slack.
+Each permalink has a **save as sticker** button that exports to Signal-spec 512×512 — WebP for static memes, APNG for animated (≤300 KB, ≤3s loop). The APNG branch runs UPNG quantization entirely in-browser, adaptively dropping the color palette until it fits the 300 KB budget; the whole encoder bundle is lazy-loaded (~95 KB) and only ships when someone actually clicks the button. Drop the output straight into Signal, Telegram, Discord, or Slack.
 
 ### OG images
 Every meme has a pre-rendered 1200×630 OG card (baked by `scripts/build-og-images.ts` with Satori + Resvg, CI-cached by content hash). The home page has a custom 77-meme honeycomb mosaic.

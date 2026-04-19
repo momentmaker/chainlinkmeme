@@ -1386,6 +1386,161 @@ a:hover { text-decoration: underline; }
 .weekly-index-list strong { color: var(--brand-blue); font-size: 16px; }
 .weekly-index-total { margin-left: auto; color: var(--muted); font-size: 12px; }
 
+/* Contribute — tutorial page. Step cards mirror .weekly-row so the whole
+   site reads as one system. The TOML schema block is dark-theme-aware with
+   subtle token coloring (comment / key / string / bool) so required vs
+   optional vs auto-filled fields scan at a glance. */
+.contribute { max-width: 880px; margin: 0 auto; }
+.contribute-header { text-align: center; margin-bottom: 48px; }
+.contribute-eyebrow {
+  font-family: Menlo, Monaco, monospace;
+  font-size: 12px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--brand-blue);
+  margin: 0 0 8px;
+}
+.contribute-title {
+  font-size: 64px;
+  font-weight: 900;
+  letter-spacing: -2px;
+  margin: 0 0 12px;
+  line-height: 1.05;
+}
+.contribute-sub {
+  color: var(--muted);
+  font-size: 15px;
+  max-width: 560px;
+  margin: 0 auto;
+  line-height: 1.55;
+}
+
+.contribute-section { margin: 0 0 40px; }
+.contribute-section-eyebrow {
+  font-family: Menlo, Monaco, monospace;
+  font-size: 12px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--brand-blue);
+  margin: 0 0 14px;
+}
+
+.contribute-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.contribute-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.contribute-step:hover { transform: translateY(-2px); border-color: var(--brand-blue); }
+.contribute-step-rank {
+  font-family: Menlo, Monaco, monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--brand-blue);
+  min-width: 36px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.contribute-step-body { flex: 1; min-width: 0; }
+.contribute-step-title {
+  display: block;
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--fg);
+  text-decoration: none;
+  margin-bottom: 4px;
+}
+a.contribute-step-title:hover { color: var(--brand-blue); text-decoration: none; }
+.contribute-step-text { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+
+.contribute-code {
+  background: #f4f6fb;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 18px 20px;
+  overflow: auto;
+  font-family: Menlo, Monaco, monospace;
+  font-size: 13px;
+  line-height: 1.75;
+  margin: 0;
+  color: #2b3447;
+}
+[data-theme="dark"] .contribute-code {
+  background: #0f141c;
+  color: #cfd6e3;
+}
+.contribute-code .tok-comment { color: #7b8699; font-style: italic; }
+[data-theme="dark"] .contribute-code .tok-comment { color: #6d7a8c; }
+.contribute-code .tok-key { color: var(--brand-blue); }
+.contribute-code .tok-string { color: #b34a00; }
+[data-theme="dark"] .contribute-code .tok-string { color: #ffa963; }
+.contribute-code .tok-bool { color: #8a2dd4; }
+[data-theme="dark"] .contribute-code .tok-bool { color: #c797ff; }
+
+.contribute-rules {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 640px) {
+  .contribute-rules { grid-template-columns: 1fr 1fr; }
+}
+.contribute-rules li {
+  position: relative;
+  padding: 12px 14px 12px 38px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg);
+}
+.contribute-rules li::before {
+  content: "⬢";
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  color: var(--brand-blue);
+  font-size: 12px;
+}
+
+.contribute-fullguide {
+  text-align: center;
+  font-family: Menlo, Monaco, monospace;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 24px 0 16px;
+}
+.contribute-fullguide a { color: var(--brand-blue); }
+
+.contribute-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+@media (max-width: 600px) {
+  .contribute-title { font-size: 44px; letter-spacing: -1.5px; }
+  .contribute-header { margin-bottom: 36px; }
+}
+
 .footer .kin {
   opacity: 0.55;
   font-size: 11px;
