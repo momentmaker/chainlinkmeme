@@ -157,7 +157,11 @@ async function handleClmeme(
 }
 
 const INLINE_RESULT_LIMIT = 20;
-const INLINE_CACHE_SECONDS = 60;
+// Specific queries are deterministic-ish — safe for Telegram's global cache.
+// Empty queries are random-per-call, so a 60s global cache would pin all
+// users to the same 20 memes for a minute at a time. Shorter + per-user.
+const INLINE_CACHE_SECONDS_QUERIED = 60;
+const INLINE_CACHE_SECONDS_RANDOM = 5;
 
 interface InlinePhotoResult {
   type: 'photo';
@@ -206,11 +210,12 @@ async function handleInline(inlineQueryId: string, query: string, env: TelegramE
   const safeManifest: Manifest = { ...manifest, memes: manifest.memes.filter(inlineSafe) };
   const memes = pickMemes(safeManifest, query, INLINE_RESULT_LIMIT);
   const results = memes.map((m) => buildInlineResult(m, env.SITE_ORIGIN));
+  const isRandom = query.trim() === '';
   return tgReply('answerInlineQuery', {
     inline_query_id: inlineQueryId,
     results,
-    cache_time: INLINE_CACHE_SECONDS,
-    is_personal: false,
+    cache_time: isRandom ? INLINE_CACHE_SECONDS_RANDOM : INLINE_CACHE_SECONDS_QUERIED,
+    is_personal: isRandom,
   });
 }
 

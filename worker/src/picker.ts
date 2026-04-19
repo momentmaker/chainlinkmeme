@@ -22,21 +22,34 @@ const MANIFEST_TTL_MS = 5 * 60 * 1000;
 const MANIFEST_FETCH_TIMEOUT_MS = 5000;
 let cachedManifest: Manifest | null = null;
 let cachedAt = 0;
+// Dedupe concurrent cold-start fetches: when N requests arrive before the
+// first manifest fetch resolves, they all share the in-flight promise.
+// Mirrors the pattern in index.ts's loadApiManifest.
+let inflightManifest: Promise<Manifest> | null = null;
 
 export async function loadManifest(origin: string): Promise<Manifest> {
   const now = Date.now();
   if (cachedManifest && now - cachedAt < MANIFEST_TTL_MS) return cachedManifest;
-  // Explicit timeout so a hung upstream surfaces as a caught exception
-  // rather than a wall-clock isolate kill, which would bypass handler-level
-  // try/catch and trigger Telegram's webhook retry loop.
-  const res = await fetch(`${origin}/manifest.json`, {
-    cf: { cacheTtl: 300 },
-    signal: AbortSignal.timeout(MANIFEST_FETCH_TIMEOUT_MS),
-  });
-  if (!res.ok) throw new Error(`manifest fetch failed: HTTP ${res.status}`);
-  cachedManifest = (await res.json()) as Manifest;
-  cachedAt = now;
-  return cachedManifest;
+  if (inflightManifest) return inflightManifest;
+  inflightManifest = (async () => {
+    try {
+      // Explicit timeout so a hung upstream surfaces as a caught exception
+      // rather than a wall-clock isolate kill, which would bypass the
+      // handler-level try/catch and trigger Telegram's webhook retry loop.
+      const res = await fetch(`${origin}/manifest.json`, {
+        cf: { cacheTtl: 300 },
+        signal: AbortSignal.timeout(MANIFEST_FETCH_TIMEOUT_MS),
+      });
+      if (!res.ok) throw new Error(`manifest fetch failed: HTTP ${res.status}`);
+      const m = (await res.json()) as Manifest;
+      cachedManifest = m;
+      cachedAt = Date.now();
+      return m;
+    } finally {
+      inflightManifest = null;
+    }
+  })();
+  return inflightManifest;
 }
 
 export function displayTitle(m: ManifestMeme): string {
@@ -44,6 +57,14 @@ export function displayTitle(m: ManifestMeme): string {
   return m.tags[0] ? `#${m.tags[0]}` : m.slug;
 }
 
+// Intentionally hardcoded to @main rather than pinning to manifest.repo_ref:
+// Telegram's inline thumbnail renderer silently drops cold-cache jsDelivr
+// URLs, and @main URLs are globally warm because the public /api/* endpoints
+// and web gallery also use them. The staleness window for a freshly-added
+// meme (before jsDelivr updates @main) is the accepted tradeoff — see the
+// revert in commit 27b5fcb. If index.ts ever switches to SHA-pinned URLs
+// via manifest.repo_ref, this hardcode creates a silent split that only
+// shows up when @main diverges from the SHA on a new meme. Revisit then.
 export function memeCdnUrl(filename: string): string {
   return `https://cdn.jsdelivr.net/gh/momentmaker/chainlinkmeme@main/memes/${filename}`;
 }

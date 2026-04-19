@@ -54,7 +54,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: main
-          fetch-depth: 1
+          # Deep enough to diff github.event.before..HEAD for jsDelivr
+          # pre-warming of new meme files after the Pages deploy lands.
+          fetch-depth: 20
 
       - uses: pnpm/action-setup@v4
 
@@ -103,6 +105,39 @@ jobs:
       - id: deployment
         name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
+
+      # jsDelivr serves memes at @main, but its edge cache only pulls new
+      # files from GitHub lazily (minutes to hours). During that window a
+      # newly added meme resolves to 404, breaking both Telegram sendPhoto
+      # and the site's OG cards. Firing a HEAD at each changed image URL
+      # forces jsDelivr to pull it into cache immediately.
+      - name: Pre-warm jsDelivr for changed meme files
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          if [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ] || [ -z "$BEFORE_SHA" ]; then
+            echo "no 'before' SHA (initial push or dispatch); skipping pre-warm"
+            exit 0
+          fi
+          changed=$(git diff --name-only --diff-filter=AM -z "$BEFORE_SHA" HEAD -- 'memes/*' | tr '\0' '\n' | grep -Ev '\.toml$' || true)
+          if [ -z "$changed" ]; then
+            echo "no meme image files changed in this push"
+            exit 0
+          fi
+          echo "pre-warming jsDelivr for:"
+          printf '  %s\n' $changed
+          echo ""
+          fail=0
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            url="https://cdn.jsdelivr.net/gh/${REPO}@main/${f}"
+            status=$(curl -o /dev/null -s -w '%{http_code}' -I --max-time 15 "$url" || echo err)
+            echo "  $status $url"
+            case "$status" in 2??) ;; *) fail=$((fail + 1)) ;; esac
+          done <<< "$changed"
+          echo "pre-warm complete ($fail failures)"
 
   deploy-worker:
     runs-on: ubuntu-latest
