@@ -4,6 +4,15 @@
 // carries the bot method + params), which avoids a second round-trip
 // to api.telegram.org.
 
+import {
+  type Manifest,
+  type ManifestMeme,
+  displayTitle,
+  loadManifest,
+  memeCdnUrl,
+  pickMeme,
+} from './picker';
+
 interface TelegramEnv {
   TELEGRAM_WEBHOOK_SECRET: string;
   TELEGRAM_BOT_TOKEN: string;
@@ -54,6 +63,92 @@ function timingSafeEqual(a: string, b: string): boolean {
   return mismatch === 0;
 }
 
+const BOT_USERNAME_SUFFIX_RE = /@[A-Za-z0-9_]+$/;
+
+// Parse a /command line into (command, remainder). Strips the optional
+// @botusername suffix that Telegram appends in group chats.
+function parseCommand(text: string): { command: string; rest: string } {
+  const space = text.indexOf(' ');
+  const head = space === -1 ? text : text.slice(0, space);
+  const rest = space === -1 ? '' : text.slice(space + 1).trim();
+  const command = head.replace(BOT_USERNAME_SUFFIX_RE, '');
+  return { command, rest };
+}
+
+function captionFor(meme: ManifestMeme, permalink: string): string {
+  const tags = meme.tags.slice(0, 6).map((t) => '#' + t).join(' ');
+  const title = displayTitle(meme);
+  const parts = [title, tags, permalink].filter(Boolean);
+  const caption = parts.join('\n');
+  return caption.length > 1024 ? caption.slice(0, 1021) + '...' : caption;
+}
+
+// Webhook-reply for sendPhoto / sendAnimation / sendMessage. Telegram
+// accepts one method call as the HTTP response body when the `method`
+// field is set — saves a round-trip to api.telegram.org.
+function tgReply(method: string, params: Record<string, unknown>): Response {
+  return Response.json({ method, ...params });
+}
+
+function handleStart(chatId: number, siteOrigin: string): Response {
+  return tgReply('sendMessage', {
+    chat_id: chatId,
+    parse_mode: 'HTML',
+    disable_web_page_preview: false,
+    text:
+      `Type <code>/clmeme &lt;tag&gt;</code> here to summon a meme, or ` +
+      `<code>@chainlinkmemebot &lt;tag&gt;</code> in any chat for an inline picker.\n\n` +
+      `Full archive: ${siteOrigin}`,
+  });
+}
+
+async function handleClmeme(
+  chatId: number,
+  replyTo: number,
+  query: string,
+  env: TelegramEnv,
+): Promise<Response> {
+  let manifest: Manifest;
+  try {
+    manifest = await loadManifest(env.SITE_ORIGIN);
+  } catch {
+    return tgReply('sendMessage', {
+      chat_id: chatId,
+      reply_parameters: { message_id: replyTo },
+      text: 'archive unreachable — try again in a minute',
+    });
+  }
+
+  const meme = pickMeme(manifest, query);
+  if (!meme) {
+    return tgReply('sendMessage', {
+      chat_id: chatId,
+      reply_parameters: { message_id: replyTo },
+      parse_mode: 'Markdown',
+      text: `no match for **${query}**. try \`sergey\`, \`moon\`, \`wagmi\`…`,
+    });
+  }
+
+  const permalink = `${env.SITE_ORIGIN}/m/${meme.slug}/`;
+  const caption = captionFor(meme, permalink);
+  const media = memeCdnUrl(meme.filename);
+
+  if (meme.animated) {
+    return tgReply('sendAnimation', {
+      chat_id: chatId,
+      reply_parameters: { message_id: replyTo },
+      animation: media,
+      caption,
+    });
+  }
+  return tgReply('sendPhoto', {
+    chat_id: chatId,
+    reply_parameters: { message_id: replyTo },
+    photo: media,
+    caption,
+  });
+}
+
 export async function handleTelegramUpdate(request: Request, env: TelegramEnv): Promise<Response> {
   const secret = request.headers.get('x-telegram-bot-api-secret-token');
   if (!secret || !timingSafeEqual(secret, env.TELEGRAM_WEBHOOK_SECRET)) {
@@ -75,7 +170,14 @@ export async function handleTelegramUpdate(request: Request, env: TelegramEnv): 
   }
 
   if (update.message?.text && update.message.entities?.some((e) => e.type === 'bot_command' && e.offset === 0)) {
-    // Filled in Task 4.
+    const msg = update.message;
+    const { command, rest } = parseCommand(msg.text!);
+    if (command === '/clmeme') {
+      return handleClmeme(msg.chat.id, msg.message_id, rest, env);
+    }
+    if (command === '/start' || command === '/help') {
+      return handleStart(msg.chat.id, env.SITE_ORIGIN);
+    }
     return ignore();
   }
 
