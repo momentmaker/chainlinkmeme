@@ -34,13 +34,19 @@ jobs:
           CI_ACTOR: ${{ github.actor }}
         run: pnpm tsx scripts/backfill-meta.ts
 
+      # Generate memes/inline/<slug>.jpg for any new PNG. Idempotent —
+      # existing siblings are skipped. Must run before the commit step so
+      # the new files land on main alongside the backfilled TOML.
+      - name: Generate inline JPEG siblings
+        run: pnpm inline-jpegs
+
       - name: Commit if changed
         run: |
           git config user.name "chainlinkmeme-bot"
           git config user.email "bot@chainlinkme.me"
           if ! git diff --quiet; then
             git add memes/
-            git commit -m "ci: backfill submitted_by and date_added"
+            git commit -m "ci: backfill meta + generate inline siblings"
             git push
           fi
 
@@ -121,7 +127,7 @@ jobs:
             echo "no 'before' SHA (initial push or dispatch); skipping pre-warm"
             exit 0
           fi
-          changed=$(git diff --name-only --diff-filter=AM -z "$BEFORE_SHA" HEAD -- 'memes/*' | tr '\0' '\n' | grep -Ev '\.toml$' || true)
+          changed=$(git diff --name-only --diff-filter=AM -z "$BEFORE_SHA" HEAD -- memes | tr '\0' '\n' | grep -Ev '\.toml$' || true)
           if [ -z "$changed" ]; then
             echo "no meme image files changed in this push"
             exit 0
