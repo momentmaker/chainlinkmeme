@@ -79,6 +79,23 @@ export function expandTokens(
   return [...withRelated];
 }
 
+// Fisher-Yates over a copy. Uniformly random order (unlike
+// `sort(() => Math.random() - 0.5)`, which is biased on some JS engines).
+// For n < items.length, a reservoir pass over the tail keeps selection
+// uniform across the whole input.
+function randomN<T>(items: readonly T[], n: number): T[] {
+  const out = items.slice(0, n);
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  for (let i = n; i < items.length; i++) {
+    const j = Math.floor(Math.random() * (i + 1));
+    if (j < n) out[j] = items[i];
+  }
+  return out;
+}
+
 export function pickMeme(manifest: Manifest, query: string): ManifestMeme | null {
   const memes = manifest.memes;
   if (memes.length === 0) return null;
@@ -103,15 +120,9 @@ export function pickMemes(manifest: Manifest, query: string, n: number): Manifes
   const memes = manifest.memes;
   if (memes.length === 0 || n <= 0) return [];
   const q = query.trim().toLowerCase();
-  if (!q) {
-    const shuffled = [...memes].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, n);
-  }
+  if (!q) return randomN(memes, n);
   const tokens = expandTokens(q.split(/[\s,]+/), manifest.synonyms ?? {}, manifest.related ?? {});
-  if (tokens.length === 0) {
-    const shuffled = [...memes].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, n);
-  }
+  if (tokens.length === 0) return randomN(memes, n);
   const scored = memes
     .map((m) => ({ m, s: scoreMeme(m, tokens), r: Math.random() }))
     .filter(({ s }) => s > 0)
