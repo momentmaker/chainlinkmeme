@@ -108,7 +108,7 @@ async function encodeAnimatedAsApng(
   const res = await fetch(url, { mode: 'cors' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const buf = new Uint8Array(await res.arrayBuffer());
-  const decoder = new ImageDecoder({ data: buf, type: 'image/gif' });
+  const decoder = new ImageDecoder({ data: buf, type: mimeFromUrl(url) });
   // tracks.ready resolves once metadata (frame count, selected track) is
   // parsed. `decoder.completed` only matters for progressive/streaming input.
   await decoder.tracks.ready;
@@ -128,19 +128,23 @@ async function encodeAnimatedAsApng(
   const rgbaBuffers: ArrayBuffer[] = [];
   const delays: number[] = [];
   let cumulativeMs = 0;
-  for (let i = 0; i < frameCount; i++) {
-    const { image } = await decoder.decode({ frameIndex: i });
-    ctx.clearRect(0, 0, size, size);
-    drawCoverFit(ctx, image, image.displayWidth, image.displayHeight, size);
-    // VideoFrame.duration is microseconds; null on single-frame sources.
-    const durationUs = image.duration ?? 100_000;
-    const delayMs = Math.max(10, Math.round(durationUs / 1000));
-    image.close();
-    const imageData = ctx.getImageData(0, 0, size, size);
-    rgbaBuffers.push(imageData.data.buffer);
-    delays.push(delayMs);
-    cumulativeMs += delayMs;
-    if (cumulativeMs >= maxDurationMs) break;
+  try {
+    for (let i = 0; i < frameCount; i++) {
+      const { image } = await decoder.decode({ frameIndex: i });
+      ctx.clearRect(0, 0, size, size);
+      drawCoverFit(ctx, image, image.displayWidth, image.displayHeight, size);
+      // VideoFrame.duration is microseconds; null on single-frame sources.
+      const durationUs = image.duration ?? 100_000;
+      const delayMs = Math.max(10, Math.round(durationUs / 1000));
+      image.close();
+      const imageData = ctx.getImageData(0, 0, size, size);
+      rgbaBuffers.push(imageData.data.buffer);
+      delays.push(delayMs);
+      cumulativeMs += delayMs;
+      if (cumulativeMs >= maxDurationMs) break;
+    }
+  } finally {
+    decoder.close();
   }
   // If the last kept frame pushed us past the cap, shorten its delay so the
   // pack meets the duration limit exactly.
@@ -150,7 +154,6 @@ async function encodeAnimatedAsApng(
   }
 
   const { default: UPNG } = await import('upng-js');
-  const UPNGTyped = UPNG as UPNGModule;
 
   // Encode with escalating degradation until we fit Signal's size budget:
   //   (1) encode at cnum=256 (best quality)
@@ -164,14 +167,14 @@ async function encodeAnimatedAsApng(
   let best: ArrayBuffer | null = null;
   const PALETTE_SWEEP_THRESHOLD = 1.5;
   while (true) {
-    const full = UPNGTyped.encode(frames, size, size, 256, dels);
-    console.debug(`[sticker] cnum=256 frames=${frames.length} → ${Math.round(full.byteLength / 1024)}KB`);
+    const full = UPNG.encode(frames, size, size, 256, dels);
+    debugLog(`[sticker] cnum=256 frames=${frames.length} → ${Math.round(full.byteLength / 1024)}KB`);
     if (!best || full.byteLength < best.byteLength) best = full;
     if (full.byteLength <= maxBytes) return new Blob([full], { type: 'image/apng' });
     if (full.byteLength <= maxBytes * PALETTE_SWEEP_THRESHOLD) {
       for (const cnum of [128, 64, 32]) {
-        const out = UPNGTyped.encode(frames, size, size, cnum, dels);
-        console.debug(`[sticker] cnum=${cnum} frames=${frames.length} → ${Math.round(out.byteLength / 1024)}KB`);
+        const out = UPNG.encode(frames, size, size, cnum, dels);
+        debugLog(`[sticker] cnum=${cnum} frames=${frames.length} → ${Math.round(out.byteLength / 1024)}KB`);
         if (out.byteLength < best.byteLength) best = out;
         if (out.byteLength <= maxBytes) return new Blob([out], { type: 'image/apng' });
       }
@@ -214,12 +217,21 @@ function triggerDownload(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
 }
 
-interface UPNGModule {
-  encode(
-    imgs: ArrayBuffer[],
-    w: number,
-    h: number,
-    cnum: number,
-    delays?: number[],
-  ): ArrayBuffer;
+function mimeFromUrl(url: string): string {
+  const ext = url.split('?')[0].split('#')[0].split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'gif':
+      return 'image/gif';
+    case 'webp':
+      return 'image/webp';
+    case 'png':
+    case 'apng':
+      return 'image/png';
+    default:
+      return 'image/gif';
+  }
+}
+
+function debugLog(msg: string): void {
+  if (import.meta.env.DEV) console.debug(msg);
 }

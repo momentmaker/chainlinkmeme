@@ -214,6 +214,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
         btn.disabled = true;
         const w = window as unknown as { umami?: { track: (n: string, d?: Record<string, unknown>) => void } };
         w.umami?.track('sticker-save', { slug, animated });
+        // Oversize messages are long ("saved (489KB — over 293KB limit)")
+        // and users need to read them; give them more time on screen.
+        let resetMs = 1800;
         try {
           const mod = await import('../../lib/sticker');
           const { oversize, blob, maxBytes } = await mod.saveAsSticker({ url, slug, animated });
@@ -222,6 +225,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
             const limitKb = Math.round(maxBytes / 1024);
             btn.textContent = `saved (${kb}KB — over ${limitKb}KB limit)`;
             w.umami?.track('sticker-oversize', { slug, kb, limitKb });
+            resetMs = 4500;
           } else {
             btn.textContent = animated ? '✓ saved (apng)' : '✓ saved';
           }
@@ -234,7 +238,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
           w.umami?.track('sticker-fail', { slug, reason });
           btn.textContent = 'sticker failed';
         } finally {
-          setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1800);
+          setTimeout(() => { btn.textContent = original; btn.disabled = false; }, resetMs);
         }
       });
     }
