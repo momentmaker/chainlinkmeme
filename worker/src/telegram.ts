@@ -136,7 +136,8 @@ async function handleClmeme(
 
   const permalink = `${env.SITE_ORIGIN}/m/${meme.slug}/`;
   const caption = captionFor(meme, permalink);
-  const media = memeCdnUrl(meme.filename);
+  const ref = manifest.repo_ref || 'main';
+  const media = memeCdnUrl(meme.filename, ref);
 
   if (meme.animated) {
     return tgReply('sendAnimation', {
@@ -174,11 +175,11 @@ function inlineSafe(m: ManifestMeme): boolean {
   return ext === 'jpg' || ext === 'jpeg';
 }
 
-function buildInlineResult(meme: ManifestMeme, siteOrigin: string): InlineResult {
+function buildInlineResult(meme: ManifestMeme, siteOrigin: string, ref: string): InlineResult {
   const permalink = `${siteOrigin}/m/${meme.slug}/`;
   const caption = captionFor(meme, permalink);
   const title = displayTitle(meme);
-  const url = memeCdnUrl(meme.filename);
+  const url = memeCdnUrl(meme.filename, ref);
   if (meme.animated) {
     return { type: 'gif', id: meme.slug, gif_url: url, thumbnail_url: url, title, caption };
   }
@@ -200,7 +201,8 @@ async function handleInline(inlineQueryId: string, query: string, env: TelegramE
 
   const safeManifest: Manifest = { ...manifest, memes: manifest.memes.filter(inlineSafe) };
   const memes = pickMemes(safeManifest, query, INLINE_RESULT_LIMIT);
-  const results = memes.map((m) => buildInlineResult(m, env.SITE_ORIGIN));
+  const ref = manifest.repo_ref || 'main';
+  const results = memes.map((m) => buildInlineResult(m, env.SITE_ORIGIN, ref));
   return tgReply('answerInlineQuery', {
     inline_query_id: inlineQueryId,
     results,

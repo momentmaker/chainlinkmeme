@@ -105,6 +105,7 @@ export async function handleDiscordInteraction(request: Request, env: DiscordEnv
   }
 
   const permalink = `${env.SITE_ORIGIN}/m/${meme.slug}/`;
+  const ref = manifest.repo_ref || 'main';
   return Response.json({
     type: RESPONSE_CHANNEL_MESSAGE,
     data: {
@@ -112,7 +113,7 @@ export async function handleDiscordInteraction(request: Request, env: DiscordEnv
         title: displayTitle(meme),
         url: permalink,
         color: 0x2f62df,
-        image: { url: memeCdnUrl(meme.filename) },
+        image: { url: memeCdnUrl(meme.filename, ref) },
         footer: { text: meme.tags.slice(0, 6).map((t) => '#' + t).join(' ') || 'chainlinkme.me' },
       }],
     },
