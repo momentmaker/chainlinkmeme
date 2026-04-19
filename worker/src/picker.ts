@@ -11,7 +11,6 @@ export interface ManifestMeme {
 }
 
 export interface Manifest {
-  repo_ref?: string;
   memes: ManifestMeme[];
   synonyms: Record<string, string[]>;
   related: Record<string, string[]>;
@@ -38,12 +37,8 @@ export function displayTitle(m: ManifestMeme): string {
   return m.tags[0] ? `#${m.tags[0]}` : m.slug;
 }
 
-// `ref` should be a commit SHA from manifest.repo_ref when available —
-// pinning the URL to a specific commit lets jsDelivr treat it as immutable
-// and avoids the stale-@main window when new memes land but jsDelivr
-// hasn't picked them up yet. Fall back to 'main' for local dev.
-export function memeCdnUrl(filename: string, ref: string): string {
-  return `https://cdn.jsdelivr.net/gh/momentmaker/chainlinkmeme@${ref}/memes/${filename}`;
+export function memeCdnUrl(filename: string): string {
+  return `https://cdn.jsdelivr.net/gh/momentmaker/chainlinkmeme@main/memes/${filename}`;
 }
 
 export function scoreMeme(m: ManifestMeme, tokens: string[]): number {
