@@ -11,6 +11,7 @@ import {
   loadManifest,
   memeCdnUrl,
   pickMeme,
+  pickMemes,
 } from './picker';
 
 interface TelegramEnv {
@@ -150,6 +151,53 @@ async function handleClmeme(
   });
 }
 
+const INLINE_RESULT_LIMIT = 20;
+const INLINE_CACHE_SECONDS = 60;
+
+interface InlineResult {
+  type: 'photo' | 'gif';
+  id: string;
+  caption: string;
+  title: string;
+  thumbnail_url: string;
+  photo_url?: string;
+  gif_url?: string;
+}
+
+function buildInlineResult(meme: ManifestMeme, siteOrigin: string): InlineResult {
+  const permalink = `${siteOrigin}/m/${meme.slug}/`;
+  const caption = captionFor(meme, permalink);
+  const title = displayTitle(meme);
+  const url = memeCdnUrl(meme.filename);
+  if (meme.animated) {
+    return { type: 'gif', id: meme.slug, gif_url: url, thumbnail_url: url, title, caption };
+  }
+  return { type: 'photo', id: meme.slug, photo_url: url, thumbnail_url: url, title, caption };
+}
+
+async function handleInline(inlineQueryId: string, query: string, env: TelegramEnv): Promise<Response> {
+  let manifest: Manifest;
+  try {
+    manifest = await loadManifest(env.SITE_ORIGIN);
+  } catch {
+    return tgReply('answerInlineQuery', {
+      inline_query_id: inlineQueryId,
+      results: [],
+      cache_time: 5,
+      is_personal: true,
+    });
+  }
+
+  const memes = pickMemes(manifest, query, INLINE_RESULT_LIMIT);
+  const results = memes.map((m) => buildInlineResult(m, env.SITE_ORIGIN));
+  return tgReply('answerInlineQuery', {
+    inline_query_id: inlineQueryId,
+    results,
+    cache_time: INLINE_CACHE_SECONDS,
+    is_personal: false,
+  });
+}
+
 export async function handleTelegramUpdate(request: Request, env: TelegramEnv): Promise<Response> {
   const secret = request.headers.get('x-telegram-bot-api-secret-token');
   if (!secret || !timingSafeEqual(secret, env.TELEGRAM_WEBHOOK_SECRET)) {
@@ -166,8 +214,7 @@ export async function handleTelegramUpdate(request: Request, env: TelegramEnv): 
   }
 
   if (update.inline_query) {
-    // Filled in Task 5.
-    return ignore();
+    return handleInline(update.inline_query.id, update.inline_query.query, env);
   }
 
   if (update.message?.text && update.message.entities?.some((e) => e.type === 'bot_command' && e.offset === 0)) {
