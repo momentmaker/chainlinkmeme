@@ -1,4 +1,5 @@
 import { handleDiscordInteraction } from './discord';
+import { handleTelegramUpdate } from './telegram';
 
 interface Env {
   DB: D1Database;
@@ -7,6 +8,8 @@ interface Env {
   DISCORD_APP_ID: string;
   DISCORD_PUBLIC_KEY: string;
   DISCORD_BOT_TOKEN: string;
+  TELEGRAM_BOT_TOKEN: string;
+  TELEGRAM_WEBHOOK_SECRET: string;
   SITE_ORIGIN: string;
 }
 
@@ -167,6 +170,12 @@ export default {
     // Never cached, never cross-origin CORSed (Discord calls server-to-server).
     if (path === '/discord/interactions' && request.method === 'POST') {
       return handleDiscordInteraction(request, env);
+    }
+
+    // Telegram webhook endpoint — auth via the X-Telegram-Bot-Api-Secret-Token
+    // header, echoes a bot action as the HTTP response body.
+    if (path === '/telegram/webhook' && request.method === 'POST') {
+      return handleTelegramUpdate(request, env);
     }
 
     // Public API — lightweight endpoints on top of the static manifest.
