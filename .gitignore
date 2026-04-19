@@ -12,6 +12,7 @@ site/public/og
 site/public/embeddings.bin
 worker/.wrangler
 worker/dist
+worker/.dev.vars
 
 # local state
 .wrangler

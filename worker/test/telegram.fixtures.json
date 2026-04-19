@@ -1,0 +1,84 @@
+{
+  "inline_sergey": {
+    "update_id": 1,
+    "inline_query": {
+      "id": "qid1",
+      "from": { "id": 42, "is_bot": false, "first_name": "u" },
+      "query": "sergey",
+      "offset": ""
+    }
+  },
+  "inline_empty": {
+    "update_id": 2,
+    "inline_query": {
+      "id": "qid2",
+      "from": { "id": 42, "is_bot": false, "first_name": "u" },
+      "query": "",
+      "offset": ""
+    }
+  },
+  "command_clmeme_sergey": {
+    "update_id": 3,
+    "message": {
+      "message_id": 100,
+      "from": { "id": 42, "is_bot": false, "first_name": "u" },
+      "chat": { "id": 777, "type": "private" },
+      "date": 1712000000,
+      "text": "/clmeme sergey",
+      "entities": [{ "type": "bot_command", "offset": 0, "length": 8 }]
+    }
+  },
+  "command_clmeme_group_suffix": {
+    "update_id": 4,
+    "message": {
+      "message_id": 101,
+      "from": { "id": 42, "is_bot": false, "first_name": "u" },
+      "chat": { "id": -1001, "type": "supergroup" },
+      "date": 1712000000,
+      "text": "/clmeme@chainlinkmemebot sergey",
+      "entities": [{ "type": "bot_command", "offset": 0, "length": 24 }]
+    }
+  },
+  "command_clmeme_empty": {
+    "update_id": 5,
+    "message": {
+      "message_id": 102,
+      "from": { "id": 42, "is_bot": false, "first_name": "u" },
+      "chat": { "id": 777, "type": "private" },
+      "date": 1712000000,
+      "text": "/clmeme",
+      "entities": [{ "type": "bot_command", "offset": 0, "length": 7 }]
+    }
+  },
+  "command_start": {
+    "update_id": 6,
+    "message": {
+      "message_id": 103,
+      "from": { "id": 42, "is_bot": false, "first_name": "u" },
+      "chat": { "id": 777, "type": "private" },
+      "date": 1712000000,
+      "text": "/start",
+      "entities": [{ "type": "bot_command", "offset": 0, "length": 6 }]
+    }
+  },
+  "channel_post": {
+    "update_id": 7,
+    "channel_post": {
+      "message_id": 1,
+      "chat": { "id": -100, "type": "channel" },
+      "date": 1712000000,
+      "text": "hello"
+    }
+  },
+  "command_clmeme_nomatch": {
+    "update_id": 8,
+    "message": {
+      "message_id": 104,
+      "from": { "id": 42, "is_bot": false, "first_name": "u" },
+      "chat": { "id": 777, "type": "private" },
+      "date": 1712000000,
+      "text": "/clmeme zzznomatchxyz",
+      "entities": [{ "type": "bot_command", "offset": 0, "length": 8 }]
+    }
+  }
+}
