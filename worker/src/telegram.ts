@@ -78,7 +78,9 @@ function parseCommand(text: string): { command: string; rest: string } {
 function captionFor(meme: ManifestMeme, permalink: string): string {
   const tags = meme.tags.slice(0, 6).map((t) => '#' + t).join(' ');
   const title = displayTitle(meme);
-  const parts = [title, tags, permalink].filter(Boolean);
+  const firstTagHash = meme.tags[0] ? '#' + meme.tags[0] : '';
+  const titleLine = title === firstTagHash ? '' : title;
+  const parts = [titleLine, tags, permalink].filter(Boolean);
   const caption = parts.join('\n');
   return caption.length > 1024 ? caption.slice(0, 1021) + '...' : caption;
 }
@@ -94,7 +96,6 @@ function handleStart(chatId: number, siteOrigin: string): Response {
   return tgReply('sendMessage', {
     chat_id: chatId,
     parse_mode: 'HTML',
-    disable_web_page_preview: false,
     text:
       `Type <code>/clmeme &lt;tag&gt;</code> here to summon a meme, or ` +
       `<code>@chainlinkmemebot &lt;tag&gt;</code> in any chat for an inline picker.\n\n` +
