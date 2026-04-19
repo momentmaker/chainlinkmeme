@@ -19,13 +19,20 @@ export interface Manifest {
 const HASH_RE = /^[0-9a-f]{10,}$/i;
 
 const MANIFEST_TTL_MS = 5 * 60 * 1000;
+const MANIFEST_FETCH_TIMEOUT_MS = 5000;
 let cachedManifest: Manifest | null = null;
 let cachedAt = 0;
 
 export async function loadManifest(origin: string): Promise<Manifest> {
   const now = Date.now();
   if (cachedManifest && now - cachedAt < MANIFEST_TTL_MS) return cachedManifest;
-  const res = await fetch(`${origin}/manifest.json`, { cf: { cacheTtl: 300 } });
+  // Explicit timeout so a hung upstream surfaces as a caught exception
+  // rather than a wall-clock isolate kill, which would bypass handler-level
+  // try/catch and trigger Telegram's webhook retry loop.
+  const res = await fetch(`${origin}/manifest.json`, {
+    cf: { cacheTtl: 300 },
+    signal: AbortSignal.timeout(MANIFEST_FETCH_TIMEOUT_MS),
+  });
   if (!res.ok) throw new Error(`manifest fetch failed: HTTP ${res.status}`);
   cachedManifest = (await res.json()) as Manifest;
   cachedAt = now;

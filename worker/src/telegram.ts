@@ -81,7 +81,9 @@ function captionFor(meme: ManifestMeme, permalink: string): string {
   const title = displayTitle(meme);
   const firstTagHash = meme.tags[0] ? '#' + meme.tags[0] : '';
   const titleLine = title === firstTagHash ? '' : title;
-  const parts = [titleLine, tags, permalink].filter(Boolean);
+  // Permalink first so it survives the 1024-char truncation — title + tags
+  // are nice-to-have, but losing the click-through URL is a silent UX bug.
+  const parts = [permalink, titleLine, tags].filter(Boolean);
   const caption = parts.join('\n');
   return caption.length > 1024 ? caption.slice(0, 1021) + '...' : caption;
 }
@@ -157,9 +159,14 @@ async function handleClmeme(
 const INLINE_RESULT_LIMIT = 20;
 const INLINE_CACHE_SECONDS = 60;
 
-type InlineResult =
-  | { type: 'photo'; id: string; caption: string; title: string; thumbnail_url: string; photo_url: string }
-  | { type: 'gif';   id: string; caption: string; title: string; thumbnail_url: string; gif_url: string };
+interface InlinePhotoResult {
+  type: 'photo';
+  id: string;
+  caption: string;
+  title: string;
+  thumbnail_url: string;
+  photo_url: string;
+}
 
 // Telegram's inline API is strict about media in ways sendPhoto/sendAnimation
 // aren't. InlineQueryResultPhoto.photo_url must be JPEG (PNGs crash some
@@ -167,21 +174,19 @@ type InlineResult =
 // (60% of our archive's GIFs exceed this and also crash the macOS client).
 // Until the manifest records file sizes we skip animated memes entirely
 // from inline results — /clmeme still serves GIFs via sendAnimation, which
-// has no 1MB limit.
+// has no 1MB limit. Callers of buildInlineResult must pre-filter with this.
 function inlineSafe(m: ManifestMeme): boolean {
   if (m.animated) return false;
   const ext = m.filename.toLowerCase().split('.').pop() ?? '';
   return ext === 'jpg' || ext === 'jpeg';
 }
 
-function buildInlineResult(meme: ManifestMeme, siteOrigin: string): InlineResult {
+// Precondition: caller has filtered with inlineSafe (photo-only).
+function buildInlineResult(meme: ManifestMeme, siteOrigin: string): InlinePhotoResult {
   const permalink = `${siteOrigin}/m/${meme.slug}/`;
   const caption = captionFor(meme, permalink);
   const title = displayTitle(meme);
   const url = memeCdnUrl(meme.filename);
-  if (meme.animated) {
-    return { type: 'gif', id: meme.slug, gif_url: url, thumbnail_url: url, title, caption };
-  }
   return { type: 'photo', id: meme.slug, photo_url: url, thumbnail_url: url, title, caption };
 }
 
