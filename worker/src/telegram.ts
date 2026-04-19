@@ -161,14 +161,17 @@ type InlineResult =
   | { type: 'photo'; id: string; caption: string; title: string; thumbnail_url: string; photo_url: string }
   | { type: 'gif';   id: string; caption: string; title: string; thumbnail_url: string; gif_url: string };
 
-// Telegram's inline API is strict about media formats in ways sendPhoto/
-// sendAnimation are not: InlineQueryResultPhoto.photo_url must point to a
-// JPEG, and some macOS clients crash outright when given a PNG. We skip
-// non-JPEG statics here so the picker stays safe. Animated memes must be
-// actual .gif to satisfy InlineQueryResultGif.
+// Telegram's inline API is strict about media in ways sendPhoto/sendAnimation
+// aren't. InlineQueryResultPhoto.photo_url must be JPEG (PNGs crash some
+// macOS clients outright), and InlineQueryResultGif caps gif_url at 1MB
+// (60% of our archive's GIFs exceed this and also crash the macOS client).
+// Until the manifest records file sizes we skip animated memes entirely
+// from inline results — /clmeme still serves GIFs via sendAnimation, which
+// has no 1MB limit.
 function inlineSafe(m: ManifestMeme): boolean {
+  if (m.animated) return false;
   const ext = m.filename.toLowerCase().split('.').pop() ?? '';
-  return m.animated ? ext === 'gif' : (ext === 'jpg' || ext === 'jpeg');
+  return ext === 'jpg' || ext === 'jpeg';
 }
 
 function buildInlineResult(meme: ManifestMeme, siteOrigin: string): InlineResult {
