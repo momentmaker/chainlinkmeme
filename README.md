@@ -72,6 +72,16 @@ Summon any meme in your Discord server with `/clmeme <tag>`:
 
 Server admins only need `applications.commands` scope — no bot user, no gateway, no ongoing permissions. Every invocation hits the Cloudflare Worker, which verifies Discord's Ed25519 signature and embeds the meme inline.
 
+### Telegram bot
+Summon any meme in Telegram with either entry point:
+
+- **Inline** — `@chainlinkmemebot sergey` in any chat. A picker appears; tap a thumbnail to send the meme. Works in DMs, groups, channels, and comment threads — no install step, no bot permissions.
+- **Command** — DM the bot or add it to a group and run `/clmeme sergey`. Empty query returns a random meme.
+
+**[Open @chainlinkmemebot →](https://t.me/chainlinkmemebot)**
+
+Like the Discord bot, there's no gateway or polling — Telegram POSTs each update to the Cloudflare Worker (`/telegram/webhook`), which verifies the secret-token header and replies with the send-photo action inline.
+
 ### X (Twitter) bot
 Two GitHub-cron-driven bots broadcast the archive:
 
@@ -126,6 +136,7 @@ pnpm weekly                      # compute this week's top-7 snapshot
 pnpm tweet:daily -- --dry-run    # preview today's daily tweet
 pnpm tweet:weekly -- --dry-run   # preview this week's top-7 thread
 pnpm discord:register            # (re)register the /clmeme slash command
+pnpm telegram:register           # (re)register Telegram webhook + bot commands
 ```
 
 ## Contribute a meme
