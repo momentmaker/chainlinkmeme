@@ -10,10 +10,13 @@ export interface Props {
   title: string;
   description: string;
   ogImage?: string;
+  ogImageWidth?: number;
+  ogImageHeight?: number;
+  ogImageAlt?: string;
   canonical?: string;
 }
 
-const { title, description, ogImage, canonical } = Astro.props;
+const { title, description, ogImage, ogImageWidth, ogImageHeight, ogImageAlt, canonical } = Astro.props;
 const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://momentmaker.github.io';
 const fullCanonical = canonical ?? siteUrl + Astro.url.pathname;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -23,6 +26,13 @@ const manifestHref = `${base}/manifest.json`;
 // unfurls refresh per deploy. Per-page OGs override by passing ogImage.
 const lastBuilt = (manifestJson as Manifest).generated_at?.slice(0, 10) || 'initial';
 const fullOg = ogImage ?? `${siteUrl}/og/_home.png?v=${encodeURIComponent(lastBuilt)}`;
+// Explicit OG dimensions save X/Telegram/Discord a probe fetch and keep
+// them from falling back to the no-image summary card if that probe is
+// slow. All Satori-rendered OGs are 1200×630; callers override only for
+// animated memes where the GIF itself is the unfurl image.
+const ogW = ogImageWidth ?? 1200;
+const ogH = ogImageHeight ?? 630;
+const ogAlt = ogImageAlt ?? description;
 ---
 <!DOCTYPE html>
 <html lang="en">
@@ -41,6 +51,9 @@ const fullOg = ogImage ?? `${siteUrl}/og/_home.png?v=${encodeURIComponent(lastBu
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content={fullOg} />
+    <meta property="og:image:width" content={String(ogW)} />
+    <meta property="og:image:height" content={String(ogH)} />
+    <meta property="og:image:alt" content={ogAlt} />
     <meta property="og:url" content={fullCanonical} />
     <meta property="og:type" content="website" />
 
@@ -48,6 +61,7 @@ const fullOg = ogImage ?? `${siteUrl}/og/_home.png?v=${encodeURIComponent(lastBu
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={fullOg} />
+    <meta name="twitter:image:alt" content={ogAlt} />
 
     <script is:inline>
       // Apply stored theme before first paint to avoid FOUC, and re-apply

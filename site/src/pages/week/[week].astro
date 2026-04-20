@@ -41,8 +41,11 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 // Per-week OG card. Only emitted when the snapshot has at least one entry
 // (build-og-images.ts returns null for empties), so we skip advertising a
 // nonexistent image for quiet weeks and let Base fall back to no og:image.
+// The ?v= cache-buster per snapshot date stops X/Telegram/Discord from
+// serving a week-old failed-unfurl cache if the first crawl missed.
 const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://chainlinkme.me';
-const weekOg = rows.length > 0 ? `${siteUrl}/og/week-${snap.week}.png` : undefined;
+const weekOgDate = snap.generated_at?.slice(0, 10) || snap.week;
+const weekOg = rows.length > 0 ? `${siteUrl}/og/week-${snap.week}.png?v=${encodeURIComponent(weekOgDate)}` : undefined;
 ---
 <Base
   title={`⬢ ${snap.week} — chainlink meme`}

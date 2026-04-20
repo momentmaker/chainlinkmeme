@@ -39,15 +39,26 @@ const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://chainlinkm
 // WhatsApp preview it moving — the Satori-rendered PNG card kills
 // animation. Static images keep the branded card. memeUrl() already
 // returns a fully-qualified jsDelivr URL in prod.
+// The ?v= cache-buster on static OGs gives X/Telegram/Discord a fresh
+// cache key per deploy — critical because those services cache failed
+// or stale unfurls for ~7 days per URL.
+const lastBuilt = manifest.generated_at?.slice(0, 10) || 'initial';
 const ogImage = meme.animated
   ? memeUrl(meme.filename)
-  : `${siteUrl}/og/${meme.slug}.png`;
+  : `${siteUrl}/og/${meme.slug}.png?v=${encodeURIComponent(lastBuilt)}`;
+// 1200×630 for the branded PNG card; for GIFs, use the source dimensions
+// so consumers don't fall back to the no-image summary card while probing.
+const ogImageWidth = meme.animated ? meme.width : 1200;
+const ogImageHeight = meme.animated ? meme.height : 630;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 <Base
   title={`${displayTitle} — chainlink meme`}
   description={meme.description || `${meme.tags.map((t) => '#' + t).join(' ')} — chainlink meme`}
   ogImage={ogImage}
+  ogImageWidth={ogImageWidth}
+  ogImageHeight={ogImageHeight}
+  ogImageAlt={displayTitle}
 >
   <ThemeToggle client:load slot="header-actions" />
 

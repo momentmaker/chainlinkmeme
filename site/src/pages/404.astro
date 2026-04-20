@@ -1,0 +1,123 @@
+---
+import Base from '../layouts/Base.astro';
+import { memeUrl, permalinkUrl } from '../lib/meme-url';
+import manifestJson from '../../public/manifest.json';
+import type { Manifest } from '../lib/manifest';
+
+const manifest = manifestJson as Manifest;
+
+// Seed pick at build time so the rendered HTML has a real meme. Client
+// script below re-rolls on load, so every visit shows a different one —
+// the SSR pick only matters for no-JS crawlers and the first paint.
+const pool = manifest.memes.filter((m) => !m.nsfw);
+const seed = pool[Math.floor(Math.random() * pool.length)];
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+const taglines = [
+  'this link fell out of the chain',
+  'hexagon not found',
+  '404 — the stack has a gap here',
+  'this tile never made it to the honeycomb',
+  'oracle returned empty',
+];
+const tagline = taglines[Math.floor(Math.random() * taglines.length)];
+---
+<Base
+  title="404 — chainlink meme"
+  description="This link fell out of the chain. Here's a random meme instead."
+>
+  <article class="notfound">
+    <header class="weekly-header">
+      <p class="weekly-eyebrow">⬢ 404</p>
+      <h1 class="weekly-title">{tagline}</h1>
+      <p class="weekly-range">the page you wanted isn't here — but this one is</p>
+    </header>
+
+    {seed ? (
+      <a
+        id="notfound-link"
+        href={permalinkUrl(seed.slug)}
+        class="notfound-meme"
+      >
+        <img
+          id="notfound-img"
+          src={memeUrl(seed.filename)}
+          alt={seed.title || seed.tags[0] || seed.slug}
+          data-slug={seed.slug}
+        />
+      </a>
+    ) : (
+      <p class="weekly-empty">No memes in the manifest yet.</p>
+    )}
+
+    <nav class="weekly-nav notfound-nav">
+      <button id="notfound-reroll" type="button" class="btn ghost">↻ another one</button>
+      <a href={`${base}/`} class="btn ghost">⬡ gallery</a>
+      <a href={`${base}/week/`} class="btn ghost">⬢ weekly</a>
+    </nav>
+  </article>
+
+  <script is:inline define:vars={{ manifestHref: `${base}/manifest.json`, base }}>
+    (async () => {
+      const img = document.getElementById('notfound-img');
+      const link = document.getElementById('notfound-link');
+      const btn = document.getElementById('notfound-reroll');
+      if (!img || !link) return;
+
+      let cache = null;
+      async function loadManifest() {
+        if (cache) return cache;
+        try {
+          const res = await fetch(manifestHref, { cache: 'force-cache' });
+          if (!res.ok) return null;
+          const m = await res.json();
+          cache = {
+            memes: (m.memes || []).filter((x) => !x.nsfw),
+            repoRef: m.repo_ref || 'main',
+          };
+          return cache;
+        } catch {
+          return null;
+        }
+      }
+
+      async function reroll() {
+        const data = await loadManifest();
+        if (!data || data.memes.length === 0) return;
+        const current = img.dataset.slug;
+        let pick;
+        for (let i = 0; i < 8; i++) {
+          pick = data.memes[Math.floor(Math.random() * data.memes.length)];
+          if (pick && pick.slug !== current) break;
+        }
+        if (!pick) return;
+        img.src = `https://cdn.jsdelivr.net/gh/momentmaker/chainlinkmeme@${data.repoRef}/memes/${pick.filename}`;
+        img.alt = pick.title || (pick.tags && pick.tags[0]) || pick.slug;
+        img.dataset.slug = pick.slug;
+        link.href = `${base}/m/${pick.slug}/`;
+      }
+
+      reroll();
+      if (btn) btn.addEventListener('click', reroll);
+    })();
+  </script>
+</Base>
+
+<style>
+  .notfound { max-width: 720px; margin: 0 auto; text-align: center; }
+  .notfound-meme {
+    display: block;
+    margin: 0 auto 32px;
+    max-width: 520px;
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--card-bg);
+    transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+  .notfound-meme:hover { transform: translateY(-2px); border-color: var(--brand-blue); }
+  .notfound-meme img { display: block; width: 100%; height: auto; }
+  .notfound-nav { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+  .notfound-nav .btn { cursor: pointer; font-family: inherit; }
+</style>
