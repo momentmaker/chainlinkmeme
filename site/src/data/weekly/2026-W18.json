@@ -1,0 +1,78 @@
+{
+  "week": "2026-W18",
+  "start": "2026-04-27",
+  "end": "2026-05-03",
+  "generated_at": "2026-04-27T09:46:23.704Z",
+  "top": [
+    {
+      "slug": "015b4e5ff4c3ab4cced11fe9cd2bb3f4",
+      "counts": {
+        "heart": 2,
+        "laugh": 0,
+        "bolt": 0,
+        "diamond": 0
+      },
+      "total": 2
+    },
+    {
+      "slug": "0d1c95b0f308936aef86cfe4e31a5c7e",
+      "counts": {
+        "heart": 1,
+        "laugh": 0,
+        "bolt": 0,
+        "diamond": 1
+      },
+      "total": 2
+    },
+    {
+      "slug": "15405d1c276550b860b20e5105c16327",
+      "counts": {
+        "heart": 1,
+        "laugh": 0,
+        "bolt": 0,
+        "diamond": 1
+      },
+      "total": 2
+    },
+    {
+      "slug": "00d005587a04901874add3c9299f4bed",
+      "counts": {
+        "heart": 1,
+        "laugh": 0,
+        "bolt": 0,
+        "diamond": 0
+      },
+      "total": 1
+    },
+    {
+      "slug": "00a33afa2b693445d622d4bcf14c68e3",
+      "counts": {
+        "heart": 0,
+        "laugh": 1,
+        "bolt": 0,
+        "diamond": 0
+      },
+      "total": 1
+    },
+    {
+      "slug": "00aa447bfc3de6e7728d2341bd74efde",
+      "counts": {
+        "heart": 0,
+        "laugh": 0,
+        "bolt": 0,
+        "diamond": 1
+      },
+      "total": 1
+    },
+    {
+      "slug": "5dbd746734c46c41e6ce6645d5f6aed8",
+      "counts": {
+        "heart": 1,
+        "laugh": 0,
+        "bolt": 0,
+        "diamond": 0
+      },
+      "total": 1
+    }
+  ]
+}
