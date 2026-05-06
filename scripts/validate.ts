@@ -22,7 +22,10 @@ function main() {
   const vocabSet = new Set(vocab.tags);
   const errors: string[] = [];
 
-  const files = fs.readdirSync(MEMES_DIR).filter((n) => !n.startsWith('_') && !n.startsWith('.'));
+  const files = fs
+    .readdirSync(MEMES_DIR, { withFileTypes: true })
+    .filter((d: fs.Dirent) => d.isFile() && !d.name.startsWith('_') && !d.name.startsWith('.'))
+    .map((d: fs.Dirent) => d.name);
   const byBase = new Map<string, { image?: string; toml?: string }>();
   for (const f of files) {
     const base = path.basename(f, path.extname(f));
