@@ -38,7 +38,7 @@ jobs:
             git push
             # Pushes authored by GITHUB_TOKEN don't fire push-event workflows,
             # so deploy.yml won't run on its own. Kick it explicitly — otherwise
-            # /week/<key>/ never ships and tweet-weekly links to a 404.
+            # the new /week/<key>/ page never ships to the site.
             gh workflow run deploy.yml --ref main
           else
             echo "no new snapshot — skipping commit"

@@ -83,10 +83,7 @@ Summon any meme in Telegram with either entry point:
 Like the Discord bot, there's no gateway or polling — Telegram POSTs each update to the Cloudflare Worker (`/telegram/webhook`), which verifies the secret-token header and replies with the send-photo action inline.
 
 ### X (Twitter) bot
-Two GitHub-cron-driven bots broadcast the archive:
-
-- **Daily**: once a day at 14:00 UTC, `/tweet-daily` posts the meme-of-the-day — same meme the site's hero shows. Static memes post as a bare permalink so X unfurls the per-meme OG card; animated memes upload the GIF so it plays in-feed.
-- **Weekly**: every Monday 14:30 UTC, `/tweet-weekly` posts a single tweet linking to `/week/<key>/`. The per-week OG card (honeycomb of that week's top memes, baked by `scripts/build-og-images.ts`) does the visual work on unfurl. One tweet instead of eight — more thumb-stopping, less quota, and every post is a permanent archive artifact people can bookmark.
+Once a day at 14:00 UTC, `/tweet-daily` posts the meme-of-the-day — the same meme the site's hero shows — as a native image (the GIF itself for animated memes) with its tags. The post carries no link on purpose: a URL-free post bills at X's $0.015 *Post: Create* rate instead of the $0.200 *Content: Create with URL* rate, and native media out-reaches link posts on X anyway.
 
 Secrets (`X_API_KEY` / `X_API_SECRET` / `X_ACCESS_TOKEN` / `X_ACCESS_SECRET`) live in GitHub Actions.
 
@@ -133,8 +130,7 @@ pnpm manifest                    # regenerate site/public/manifest.json from mem
 pnpm og                          # rebuild OG images (cache-friendly)
 pnpm validate                    # PR-style schema + vocab + uniqueness checks
 pnpm weekly                      # compute this week's top-7 snapshot
-pnpm tweet:daily -- --dry-run    # preview today's daily tweet
-pnpm tweet:weekly -- --dry-run   # preview this week's top-7 thread
+pnpm tweet:daily -- --dry-run    # preview today's daily post
 pnpm discord:register            # (re)register the /clmeme slash command
 pnpm telegram:register           # (re)register Telegram webhook + bot commands
 ```

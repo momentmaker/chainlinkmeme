@@ -17,8 +17,7 @@
     "discord:register": "tsx scripts/register-discord-command.ts",
     "telegram:register": "tsx scripts/register-telegram-webhook.ts",
     "generate-tomls": "tsx scripts/generate-tomls.ts",
-    "tweet:daily": "tsx scripts/tweet-daily.ts",
-    "tweet:weekly": "tsx scripts/tweet-weekly.ts"
+    "tweet:daily": "tsx scripts/tweet-daily.ts"
   },
   "packageManager": "pnpm@10.18.2",
   "dependencies": {
