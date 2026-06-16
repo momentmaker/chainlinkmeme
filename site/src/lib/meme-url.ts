@@ -57,6 +57,20 @@ export function thumbUrl(
   return `https://wsrv.nl/?${params.toString()}`;
 }
 
+// Full-resolution display URL for "see the whole image" surfaces (modal,
+// permalink, hero, shuffle, embed). Static images go through wsrv — edge-cached
+// and re-encoded to high-quality WebP — so repeat views are fast and the
+// raw.github origin isn't hit directly at scale; callers add an onError
+// fallback to memeUrl so a wsrv outage degrades to the origin rather than
+// breaking. Animated GIFs skip wsrv: re-encoding them full-size is ≥ the
+// original and much heavier. (Downloads, stickers and OG meta tags keep
+// memeUrl — they need the untouched original bytes / a webp-free social URL.)
+export function fullUrl(filename: string, opts: { animated?: boolean } = {}): string {
+  if (opts.animated || import.meta.env.DEV) return memeUrl(filename);
+  const params = new URLSearchParams({ url: memeUrl(filename), output: 'webp', q: '90' });
+  return `https://wsrv.nl/?${params.toString()}`;
+}
+
 export function permalinkUrl(slug: string): string {
   return `${BASE}/m/${slug}/`;
 }

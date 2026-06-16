@@ -1,5 +1,5 @@
 ---
-import { memeUrl, permalinkUrl } from '../../lib/meme-url';
+import { fullUrl, memeUrl, permalinkUrl } from '../../lib/meme-url';
 import type { Manifest, MemeEntry } from '../../lib/manifest';
 
 export async function getStaticPaths() {
@@ -68,7 +68,7 @@ const canonical = permalinkUrl(meme.slug);
   </head>
   <body>
     <a class="embed-link" href={canonical} target="_blank" rel="noopener">
-      <img src={memeUrl(meme.filename)} alt={meme.title || meme.slug} />
+      <img src={fullUrl(meme.filename, { animated: meme.animated })} alt={meme.title || meme.slug} onerror={`this.onerror=null;this.src='${memeUrl(meme.filename)}'`} />
       <span class="embed-footer">⬢ chainlinkme.me</span>
     </a>
   </body>

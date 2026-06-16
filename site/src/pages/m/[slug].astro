@@ -1,7 +1,7 @@
 ---
 import Base from '../../layouts/Base.astro';
 import { ThemeToggle, PermalinkReactions } from '../../components/Gallery';
-import { memeUrl, permalinkUrl } from '../../lib/meme-url';
+import { fullUrl, memeUrl, permalinkUrl } from '../../lib/meme-url';
 import type { Manifest, MemeEntry } from '../../lib/manifest';
 import manifestJson from '../../../public/manifest.json';
 
@@ -66,9 +66,10 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     <div class="permalink-stage">
       <img
         class="permalink-img"
-        src={memeUrl(meme.filename)}
+        src={fullUrl(meme.filename, { animated: meme.animated })}
         alt={meme.title || meme.slug}
         style={`view-transition-name: meme-${meme.slug};`}
+        onerror={`this.onerror=null;this.src='${memeUrl(meme.filename)}'`}
       />
       <!-- Copy-link hex — mirrors the gallery card's top-right action slot. -->
       <div class="permalink-overlay-top-right">
