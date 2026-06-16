@@ -24,6 +24,33 @@ export function memeUrl(filename: string): string {
   return `https://cdn.jsdelivr.net/gh/${REPO_OWNER}/${REPO_NAME}@${REPO_REF}/memes/${filename}`;
 }
 
+// Grid-thumbnail URL via wsrv.nl — a free image CDN that downscales and
+// re-encodes the immutable jsDelivr original to WebP on the fly, then edge-
+// caches the result. Cards request these instead of the multi-megabyte
+// originals so scrolling a large gallery doesn't choke on image decode. The
+// modal, permalink and hero keep memeUrl for full fidelity.
+//
+// DEV has no public origin for wsrv to fetch, so we pass through to the local
+// original — the optimisation only matters in prod.
+export function thumbUrl(
+  filename: string,
+  width: number,
+  opts: { animated?: boolean } = {},
+): string {
+  if (import.meta.env.DEV) return memeUrl(filename);
+  const params = new URLSearchParams({
+    url: memeUrl(filename),
+    w: String(width),
+    output: 'webp',
+    q: '80',
+  });
+  // Animated sources need every frame requested explicitly (n=-1), else wsrv
+  // returns a single still. Output stays WebP — an animated WebP is a fraction
+  // of the source GIF's weight.
+  if (opts.animated) params.set('n', '-1');
+  return `https://wsrv.nl/?${params.toString()}`;
+}
+
 export function permalinkUrl(slug: string): string {
   return `${BASE}/m/${slug}/`;
 }
