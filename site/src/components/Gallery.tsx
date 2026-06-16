@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Manifest, MemeEntry } from '../lib/manifest';
-import { apiUrl, memeUrl, permalinkUrl } from '../lib/meme-url';
+import { apiUrl, memeUrl, permalinkUrl, thumbUrl } from '../lib/meme-url';
 import { filterMemes } from '../lib/search';
 
 interface Props {
@@ -127,15 +127,28 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     () => manifest ? filterMemes(manifest.memes, manifest, { query, animatedOnly, favoritesOnly, favorites }) : [],
     [manifest, query, animatedOnly, favoritesOnly, favorites],
   );
+  // Live filtered count for the IntersectionObserver callback below. Read via a
+  // ref so the observer reads the current length without closing over a stale
+  // value and without re-subscribing on every keystroke.
+  const filteredLengthRef = useRef(filtered.length);
+  filteredLengthRef.current = filtered.length;
 
   // Spotlight mode: when the query is active, render more cards than usual so
   // the user sees a constellation of matches lit up against their dim
   // neighbours — not a lonely filtered list. Matches always lead the order.
   const queryActive = query.trim().length > 0;
   const spotlightCap = pageSize * 3;
+  // Spotlight reveal (matches lit against dimmed neighbours) only makes sense
+  // when the matches are few enough to sit alongside that context. With more
+  // matches than the cap we switch to a paginated matches-only grid — the same
+  // sentinel + "show all" path as the unfiltered home view. Otherwise the
+  // result set was silently truncated at spotlightCap with no way to reach the
+  // rest of the matches.
+  const spotlightActive = queryActive && filtered.length <= spotlightCap;
+  const paginated = !spotlightActive;
   const visible = useMemo(() => {
     if (!manifest) return [] as MemeEntry[];
-    if (!queryActive) {
+    if (paginated) {
       const take = showAll ? filtered.length : Math.min(page, MAX_AUTO_PAGES) * pageSize;
       return filtered.slice(0, take);
     }
@@ -145,7 +158,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
       ...filtered.slice(0, spotlightCap),
       ...nonMatches.slice(0, Math.max(0, spotlightCap - filtered.length)),
     ];
-  }, [manifest, filtered, queryActive, page, pageSize, spotlightCap, showAll]);
+  }, [manifest, filtered, paginated, page, pageSize, spotlightCap, showAll]);
   const matchLookup = useMemo(() => new Set(filtered.map((m) => m.slug)), [filtered]);
   // slug → position in `visible` — lets the JS-masonry column render figure
   // out which card should hold the keyboard focus without an O(N) indexOf.
@@ -277,9 +290,16 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   }, [toast]);
 
   useEffect(() => {
-    if (focused >= 0 && focusedCardRef.current) {
-      focusedCardRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }
+    if (focused < 0 || !focusedCardRef.current) return;
+    const el = focusedCardRef.current;
+    // content-visibility:auto cards report the 360px intrinsic estimate until
+    // first paint, so a scroll computed before the card renders can land
+    // off-centre. The first call pulls it into render range; a rAF re-centre
+    // then uses its real height. For the common ±1 focus move the card is
+    // usually already rendered, so the second call is effectively a no-op.
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    const raf = requestAnimationFrame(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+    return () => cancelAnimationFrame(raf);
   }, [focused]);
 
   const toggleFavorite = useCallback((slug: string) => {
@@ -443,8 +463,9 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   }, [onKey]);
 
   // Infinite scroll: observe a sentinel near the footer and bump the page as
-  // it enters the viewport. Only active when no query is set — spotlight mode
-  // already shows a large set, and pagination would feel wrong there.
+  // it enters the viewport. Active whenever we're paginating — the unfiltered
+  // home view and the many-matches search view both use it. Skipped only in
+  // spotlight mode, which already renders the full (small) match set at once.
   // The sentinel stops at MAX_AUTO_PAGES so the footer becomes reachable;
   // users can click "show all" to keep going.
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -453,7 +474,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   // origin and make the whole screen seem to swipe on release.
   const swipeRef = useRef({ x: 0, y: 0, t: 0 });
   useEffect(() => {
-    if (queryActive || showAll) return;
+    if (!paginated || showAll) return;
     const el = sentinelRef.current;
     if (!el || !manifest) return;
     const io = new IntersectionObserver(
@@ -461,7 +482,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
         if (entries.some((e) => e.isIntersecting)) {
           setPage((p) => {
             if (p >= MAX_AUTO_PAGES) return p;
-            if (p * pageSize >= filtered.length) return p;
+            if (p * pageSize >= filteredLengthRef.current) return p;
             return p + 1;
           });
         }
@@ -470,7 +491,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [queryActive, manifest, filtered.length, pageSize, showAll]);
+  }, [paginated, manifest, pageSize, showAll]);
 
 
   return (
@@ -487,7 +508,12 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
                 onClick={() => setModalSlug(m.slug)}
                 aria-label={`Open ${m.title || m.slug}`}
               >
-                <img src={memeUrl(m.filename)} alt={m.title || m.slug} loading="lazy" />
+                <img
+                  src={thumbUrl(m.filename, 240, { animated: m.animated })}
+                  alt={m.title || m.slug}
+                  loading="lazy"
+                  onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = memeUrl(m.filename); }}
+                />
                 <span className="popular-badge">
                   ⬢ {reactions[m.slug] ? fmtCount(reactions[m.slug].heart + reactions[m.slug].laugh + reactions[m.slug].bolt + reactions[m.slug].diamond) : 0}
                 </span>
@@ -586,7 +612,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
       {queryActive && manifest && (
         <div className="match-count">
           <strong>{filtered.length}</strong> match{filtered.length === 1 ? '' : 'es'}
-          {filtered.length < manifest.memes.length && (
+          {spotlightActive && filtered.length < manifest.memes.length && (
             <> · non-matches dimmed for context</>
           )}
         </div>
@@ -608,8 +634,8 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
                     meme={m}
                     index={i}
                     focused={i === focused}
-                    lit={queryActive && matchLookup.has(m.slug)}
-                    dim={queryActive && !matchLookup.has(m.slug)}
+                    lit={spotlightActive && matchLookup.has(m.slug)}
+                    dim={spotlightActive && !matchLookup.has(m.slug)}
                     liked={favorites.has(m.slug)}
                     reactionCounts={reactions[m.slug] ?? EMPTY_REACTIONS}
                     innerRef={i === focused ? focusedCardRef : null}
@@ -628,7 +654,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
         </div>
       )}
 
-      {!queryActive && visible.length < filtered.length && (
+      {paginated && visible.length < filtered.length && (
         page < MAX_AUTO_PAGES && !showAll ? (
           <div ref={sentinelRef} className="load-sentinel" aria-hidden="true">
             <span>⬢ loading more ⬢</span>
@@ -813,6 +839,42 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   );
 }
 
+// Responsive grid thumbnail: serves a right-sized WebP through wsrv.nl so the
+// browser fetches ~20 KB on a phone yet stays crisp on retina, instead of the
+// multi-megabyte original. width/height carry the *original* aspect ratio so
+// the masonry reserves correct space whatever resolution is served. On proxy
+// failure (outage, rate limit, an un-resizable source) it falls back once to
+// the full-res original so a card never renders blank.
+//
+// THUMB_SIZES caps each tier at the real card width — the .page container maxes
+// at 1280px so a 3-col card never exceeds ~403px; an unclamped 33vw would make
+// wide non-retina viewports over-fetch the 1080w tier. Its 640/1096 breakpoints
+// MUST stay in sync with the matchMedia thresholds in the columnCount effect
+// and the @media rules in base.css.
+const THUMB_WIDTHS = [360, 540, 720, 1080] as const;
+const THUMB_SIZES = '(max-width: 640px) 100vw, (max-width: 1096px) min(50vw, 600px), min(33vw, 420px)';
+
+function Thumb({ meme }: { meme: MemeEntry }) {
+  const [failed, setFailed] = useState(false);
+  const shared = {
+    alt: meme.title || meme.slug,
+    loading: 'lazy' as const,
+    decoding: 'async' as const,
+    width: meme.width || undefined,
+    height: meme.height || undefined,
+    style: { viewTransitionName: `meme-${meme.slug}` } as React.CSSProperties,
+  };
+  if (failed) return <img src={memeUrl(meme.filename)} {...shared} />;
+
+  const max = meme.width || THUMB_WIDTHS[THUMB_WIDTHS.length - 1];
+  const ladder = THUMB_WIDTHS.filter((w) => w <= max);
+  const widths = ladder.length > 0 ? ladder : [max];
+  const opts = { animated: meme.animated };
+  const srcSet = widths.map((w) => `${thumbUrl(meme.filename, w, opts)} ${w}w`).join(', ');
+  const src = thumbUrl(meme.filename, widths[Math.min(1, widths.length - 1)], opts);
+  return <img src={src} srcSet={srcSet} sizes={THUMB_SIZES} onError={() => setFailed(true)} {...shared} />;
+}
+
 interface CardProps {
   meme: MemeEntry;
   index: number;
@@ -841,15 +903,7 @@ function Card({ meme, index, focused, lit, dim, liked, reactionCounts, innerRef,
       role="listitem"
     >
       <a href={permalinkUrl(meme.slug)} onClick={(e) => { e.preventDefault(); onOpenModal(); }}>
-        <img
-          src={memeUrl(meme.filename)}
-          alt={meme.title || meme.slug}
-          loading="lazy"
-          decoding="async"
-          width={meme.width || undefined}
-          height={meme.height || undefined}
-          style={{ viewTransitionName: `meme-${meme.slug}` }}
-        />
+        <Thumb meme={meme} />
       </a>
       <button
         type="button"
