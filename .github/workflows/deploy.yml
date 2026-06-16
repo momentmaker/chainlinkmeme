@@ -112,12 +112,12 @@ jobs:
         name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
 
-      # jsDelivr serves memes at @main, but its edge cache only pulls new
-      # files from GitHub lazily (minutes to hours). During that window a
-      # newly added meme resolves to 404, breaking both Telegram sendPhoto
-      # and the site's OG cards. Firing a HEAD at each changed image URL
-      # forces jsDelivr to pull it into cache immediately.
-      - name: Pre-warm jsDelivr for changed meme files
+      # Sanity-check that each changed meme is reachable at the raw.github
+      # origin — the site, bots and OG cards now read from there because
+      # jsDelivr redirect-loops for this repo (CDN repo-size block at ~600 MB).
+      # raw.github has no lazy-pull window, so this is a reachability check
+      # rather than a cache warm; wsrv warms its own edge on first request.
+      - name: Check changed meme files are reachable at origin
         env:
           BEFORE_SHA: ${{ github.event.before }}
           REPO: ${{ github.repository }}
@@ -138,7 +138,7 @@ jobs:
           fail=0
           while IFS= read -r f; do
             [ -z "$f" ] && continue
-            url="https://cdn.jsdelivr.net/gh/${REPO}@main/${f}"
+            url="https://raw.githubusercontent.com/${REPO}/main/${f}"
             status=$(curl -o /dev/null -s -w '%{http_code}' -I --max-time 15 "$url" || echo err)
             echo "  $status $url"
             case "$status" in 2??) ;; *) fail=$((fail + 1)) ;; esac

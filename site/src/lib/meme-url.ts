@@ -1,7 +1,13 @@
-// In prod, images are served by jsDelivr from the public GitHub repo.
-// In dev, we serve them via a Vite middleware that points at ../memes.
+// In prod, images are served from raw.githubusercontent.com (the GitHub
+// origin) for the public repo. In dev, a Vite middleware points at ../memes.
 // The repo owner/name/ref are baked at build time from env vars so the deployed
-// site pins to an immutable git ref (perfect cache behavior on jsDelivr).
+// site pins to an immutable git ref (raw.github accepts a commit SHA in the
+// path, so the URL is immutable and wsrv caches it permanently).
+//
+// Why not jsDelivr: jsDelivr started redirect-looping (HTTP 301 → self) for
+// this whole repo once it crossed ~600 MB — a CDN repo-size block. The origin
+// has no such limit. Grid thumbnails go through wsrv (edge-cached) so the
+// origin only sees one fetch per unique image.
 
 const REPO_OWNER = import.meta.env.PUBLIC_REPO_OWNER ?? 'momentmaker';
 const REPO_NAME = import.meta.env.PUBLIC_REPO_NAME ?? 'chainlinkmeme';
@@ -21,11 +27,11 @@ export function memeUrl(filename: string): string {
   if (import.meta.env.DEV) {
     return `/memes/${filename}`;
   }
-  return `https://cdn.jsdelivr.net/gh/${REPO_OWNER}/${REPO_NAME}@${REPO_REF}/memes/${filename}`;
+  return `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_REF}/memes/${filename}`;
 }
 
 // Grid-thumbnail URL via wsrv.nl — a free image CDN that downscales and
-// re-encodes the immutable jsDelivr original to WebP on the fly, then edge-
+// re-encodes the immutable raw.github original to WebP on the fly, then edge-
 // caches the result. Cards request these instead of the multi-megabyte
 // originals so scrolling a large gallery doesn't choke on image decode. The
 // modal, permalink and hero keep memeUrl for full fidelity.

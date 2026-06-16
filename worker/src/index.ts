@@ -60,7 +60,7 @@ const REPO_OWNER = 'momentmaker';
 const REPO_NAME = 'chainlinkmeme';
 
 function cdnImage(filename: string, ref: string): string {
-  return `https://cdn.jsdelivr.net/gh/${REPO_OWNER}/${REPO_NAME}@${ref}/memes/${filename}`;
+  return `https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${ref}/memes/${filename}`;
 }
 
 function shapeMeme(m: ApiMeme, origin: string, ref: string): Record<string, unknown> {

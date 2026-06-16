@@ -92,7 +92,7 @@ const tagline = taglines[Math.floor(Math.random() * taglines.length)];
           if (pick && pick.slug !== current) break;
         }
         if (!pick) return;
-        img.src = `https://cdn.jsdelivr.net/gh/momentmaker/chainlinkmeme@${data.repoRef}/memes/${pick.filename}`;
+        img.src = `https://raw.githubusercontent.com/momentmaker/chainlinkmeme/${data.repoRef}/memes/${pick.filename}`;
         img.alt = pick.title || (pick.tags && pick.tags[0]) || pick.slug;
         img.dataset.slug = pick.slug;
         link.href = `${base}/m/${pick.slug}/`;

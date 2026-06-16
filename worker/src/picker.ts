@@ -61,16 +61,14 @@ export function displayTitle(m: ManifestMeme): string {
   return m.tags[0] ? `#${m.tags[0]}` : m.slug;
 }
 
-// Intentionally hardcoded to @main rather than pinning to manifest.repo_ref:
-// Telegram's inline thumbnail renderer silently drops cold-cache jsDelivr
-// URLs, and @main URLs are globally warm because the public /api/* endpoints
-// and web gallery also use them. The staleness window for a freshly-added
-// meme (before jsDelivr updates @main) is the accepted tradeoff — see the
-// revert in commit 27b5fcb. If index.ts ever switches to SHA-pinned URLs
-// via manifest.repo_ref, this hardcode creates a silent split that only
-// shows up when @main diverges from the SHA on a new meme. Revisit then.
+// Served from raw.githubusercontent.com (the GitHub origin) at /main/, not
+// jsDelivr: jsDelivr began redirect-looping for this whole repo once it crossed
+// ~600 MB (a CDN repo-size block). The origin has no cold-cache window — files
+// are available the instant they're pushed — which also removes the reason the
+// old jsDelivr version was pinned to @main (Telegram's inline renderer dropped
+// cold-cache jsDelivr URLs). /main/ is kept for parity with index.ts.
 export function memeCdnUrl(filename: string): string {
-  return `https://cdn.jsdelivr.net/gh/momentmaker/chainlinkmeme@main/memes/${filename}`;
+  return `https://raw.githubusercontent.com/momentmaker/chainlinkmeme/main/memes/${filename}`;
 }
 
 export function scoreMeme(m: ManifestMeme, tokens: string[]): number {
