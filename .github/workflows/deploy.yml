@@ -18,13 +18,13 @@ jobs:
   backfill-meta:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 2
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with: { node-version: 22, cache: pnpm }
 
       - run: pnpm install --frozen-lockfile=false
@@ -57,16 +57,16 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: main
-          # Deep enough to diff github.event.before..HEAD for jsDelivr
-          # pre-warming of new meme files after the Pages deploy lands.
+          # Deep enough to diff github.event.before..HEAD for the origin
+          # reachability check of new meme files after the Pages deploy lands.
           fetch-depth: 20
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with: { node-version: 22, cache: pnpm }
 
       - run: pnpm install --frozen-lockfile=false
@@ -80,7 +80,7 @@ jobs:
       # added or edited memes re-render per deploy — avoids spending 20+ minutes
       # every build re-rasterizing the same 1,798 cards.
       - name: Cache OG images
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: site/public/og
           # Bump the version prefix whenever the OG card's visual design
@@ -104,13 +104,13 @@ jobs:
         run: pnpm --filter site build
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site/dist
 
       - id: deployment
         name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
       # Sanity-check that each changed meme is reachable at the raw.github
       # origin — the site, bots and OG cards now read from there because
@@ -132,7 +132,7 @@ jobs:
             echo "no meme image files changed in this push"
             exit 0
           fi
-          echo "pre-warming jsDelivr for:"
+          echo "checking origin reachability for:"
           printf '  %s\n' $changed
           echo ""
           fail=0
@@ -148,13 +148,13 @@ jobs:
   deploy-worker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile=false
       - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
