@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Manifest, MemeEntry } from '../lib/manifest';
-import { memeUrl, permalinkUrl } from '../lib/meme-url';
+import { fullUrl, memeUrl, permalinkUrl } from '../lib/meme-url';
 
 interface Props {
   manifestUrl?: string;
@@ -175,9 +175,10 @@ export default function Shuffle({ manifestUrl = '/manifest.json' }: Props) {
         <div className="shuffle-stage" onClick={() => { if (cursor < history.length - 1) stepForward(); else void advance(); }}>
           <img
             key={current.slug}
-            src={memeUrl(current.filename)}
+            src={fullUrl(current.filename, { animated: current.animated })}
             alt={displayTitle(current)}
             className="shuffle-image"
+            onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = memeUrl(current.filename); }}
           />
           <div className="shuffle-meta">
             <a
@@ -189,7 +190,7 @@ export default function Shuffle({ manifestUrl = '/manifest.json' }: Props) {
             </a>
             <p className="shuffle-hint">space / → next · ← previous · esc exit</p>
           </div>
-          {nextMeme && <img src={memeUrl(nextMeme.filename)} alt="" aria-hidden="true" className="shuffle-preload" />}
+          {nextMeme && <img src={fullUrl(nextMeme.filename, { animated: nextMeme.animated })} alt="" aria-hidden="true" className="shuffle-preload" />}
         </div>
       ) : (
         <p className="shuffle-loading">loading…</p>

@@ -2,7 +2,7 @@
 import Base from '../layouts/Base.astro';
 import Gallery, { ThemeToggle, ProgressBar, HexScrollTop } from '../components/Gallery';
 import { memeOfDay } from '../lib/meme-of-day';
-import { memeUrl, permalinkUrl } from '../lib/meme-url';
+import { fullUrl, memeUrl, permalinkUrl } from '../lib/meme-url';
 import type { Manifest } from '../lib/manifest';
 import manifestJson from '../../public/manifest.json';
 
@@ -53,12 +53,13 @@ const homeOg = `${siteUrl}/og/_home.png?v=${encodeURIComponent(lastBuilt || 'ini
     <a href={permalinkUrl(mod.slug)} class="hero" style="text-decoration: none; color: white;">
       <img
         class="hero-img"
-        src={memeUrl(mod.filename)}
+        src={fullUrl(mod.filename, { animated: mod.animated })}
         alt={heroTitle}
         width={mod.width || 160}
         height={mod.height || 160}
         loading="eager"
         decoding="async"
+        onerror={`this.onerror=null;this.src='${memeUrl(mod.filename)}'`}
       />
       <div>
         <div class="hero-label">⬢ meme of the day</div>

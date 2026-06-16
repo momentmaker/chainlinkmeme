@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Manifest, MemeEntry } from '../lib/manifest';
-import { apiUrl, memeUrl, permalinkUrl, thumbUrl } from '../lib/meme-url';
+import { apiUrl, fullUrl, memeUrl, permalinkUrl, thumbUrl } from '../lib/meme-url';
 import { filterMemes } from '../lib/search';
 
 interface Props {
@@ -384,7 +384,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
       const neighbour = carouselList[modalIndex + dir];
       if (neighbour) {
         const img = new Image();
-        img.src = memeUrl(neighbour.filename);
+        img.src = fullUrl(neighbour.filename, { animated: neighbour.animated });
       }
     }
   }, [modalIndex, carouselList]);
@@ -746,9 +746,10 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
               >
                 <img
                   key={modalMeme.slug}
-                  src={memeUrl(modalMeme.filename)}
+                  src={fullUrl(modalMeme.filename, { animated: modalMeme.animated })}
                   alt={modalMeme.title || modalMeme.slug}
                   onLoad={() => setModalLoading(false)}
+                  onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = memeUrl(modalMeme.filename); }}
                   decoding="async"
                   fetchPriority="high"
                 />
