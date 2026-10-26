@@ -227,6 +227,7 @@ export class VerseEngine {
   private onContextMenu = (e: Event) => e.preventDefault();
 
   private onPointerDown = (e: PointerEvent) => {
+    if (this.recording) return;
     this.canvas.setPointerCapture(e.pointerId);
     if (e.pointerType === 'touch') {
       this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -303,6 +304,7 @@ export class VerseEngine {
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    if (this.recording) return;
     const scale = e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1;
     const k = e.ctrlKey ? 0.01 : 0.0013;
     this.cam.zoom(Math.exp(clamp(e.deltaY * scale * k, -0.6, 0.6)));
@@ -330,7 +332,8 @@ export class VerseEngine {
   // two seconds of sub-30fps frames, step the pixel ratio down (not below
   // 0.75) and give it another two seconds.
   private adaptQuality(dt: number): void {
-    if (this.time < 4 || document.hidden) return;
+    // Never resize mid-clip: the encoder can't follow a resolution change.
+    if (this.time < 4 || document.hidden || this.recording) return;
     this.slowFrames = dt > 1 / 30 ? this.slowFrames + 1 : Math.max(0, this.slowFrames - 2);
     if (this.slowFrames > 60 && this.dpr > 0.8) {
       this.dprCap = Math.max(0.75, this.dpr * 0.75);
@@ -560,20 +563,24 @@ export class VerseEngine {
     this.mode = 'assembling';
     this.morph = 0;
     this.spinRate = 0;
-    // Fit the portrait into the space the top bar and the result toolbar
-    // leave free, and nudge it up by half the toolbar so it isn't covered.
-    const top = 64, bottom = this.cssW < 720 ? 150 : 128;
+    this.cam.flyTo(this.portraitPose(), this.opts.reducedMotion ? 0 : 2.8);
+  }
+
+  // Square on to the portrait, fitted into the space the top bar and the
+  // result toolbar leave free (or the whole frame, for a clip) and nudged up
+  // so the toolbar doesn't cover it.
+  private portraitPose(clip = false) {
+    const pl = this.plane!, res = this.mosaic!;
+    const top = clip ? 0 : 64, bottom = clip ? 0 : this.cssW < 720 ? 150 : 128;
     const freeH = Math.max(120, this.cssH - top - bottom);
     const freeFrac = freeH / this.cssH;
     const aspect = this.cssW / this.cssH;
-    const halfH = Math.max(h / 2, result.width / 2 / aspect) / freeFrac;
-    const dist = (halfH * 1.06) / Math.tan(this.cam.fov / 2);
+    const halfH = Math.max(res.height / 2, res.width / 2 / aspect) / freeFrac;
+    const dist = (halfH * (clip ? 1.12 : 1.06)) / Math.tan(this.cam.fov / 2);
     const worldPerPx = (2 * dist * Math.tan(this.cam.fov / 2)) / this.cssH;
     const lift = ((bottom - top) / 2) * worldPerPx;
-    this.cam.flyTo(
-      { target: v3.add(origin, [0, -lift, 0]), yaw, pitch: 0.04, dist },
-      this.opts.reducedMotion ? 0 : 2.8,
-    );
+    const yaw = Math.atan2(pl.normal[0], pl.normal[2]);
+    return { target: v3.add(pl.origin, [0, -lift, 0]) as Vec3, yaw, pitch: 0.04, dist };
   }
 
   disassemble(): void {
@@ -589,6 +596,65 @@ export class VerseEngine {
     if (!this.mosaic) return;
     this.mode = 'assembling';
     this.morph = 0;
+  }
+
+  // ── clips ────────────────────────────────────────────────────────────
+
+  private recording = false;
+  private assembledWaiters: (() => void)[] = [];
+
+  static clipType(): string | undefined {
+    if (typeof MediaRecorder === 'undefined' || typeof HTMLCanvasElement === 'undefined') return undefined;
+    if (!('captureStream' in HTMLCanvasElement.prototype)) return undefined;
+    // MP4 first: it's what X and iMessage accept. Chrome 126+ and Safari
+    // record it; Firefox falls back to WebM, which Discord and Telegram play.
+    return ['video/mp4;codecs=avc1.640028', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+      .find((t) => MediaRecorder.isTypeSupported(t));
+  }
+
+  get isRecording(): boolean {
+    return this.recording;
+  }
+
+  // Films the assembly from scratch — the galaxy pouring into the portrait
+  // under a slow push-in — straight off the canvas (none of the HTML UI is
+  // in it), at most 1920px on the long side.
+  async recordAssemble(): Promise<{ blob: Blob; ext: 'mp4' | 'webm' } | null> {
+    const type = VerseEngine.clipType();
+    if (!this.mosaic || !this.plane || !type || this.recording || this.mode === 'disassembling') return null;
+    this.recording = true;
+    this.setHover(-1, -1);
+    if (this.focus >= 0) this.clearFocus({ pullBack: false });
+    const cap = this.dprCap;
+    this.dprCap = Math.min(cap, 1920 / Math.max(this.cssW, this.cssH));
+    this.resize();
+    const pose = this.portraitPose(true);
+    this.cam.pose = { ...pose, target: [...pose.target] as Vec3, dist: pose.dist * 1.32 };
+    this.cam.goal = { ...this.cam.pose, target: [...pose.target] as Vec3 };
+    this.cam.flyTo(pose, 6.4);
+    this.mode = 'assembling';
+    this.morph = 0;
+
+    const stream = this.canvas.captureStream(30);
+    const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 12_000_000 });
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    const stopped = new Promise<void>((r) => { rec.onstop = () => r(); });
+    try {
+      rec.start(500);
+      await new Promise<void>((r) => this.assembledWaiters.push(r));
+      await new Promise((r) => setTimeout(r, 1800));
+    } finally {
+      if (rec.state !== 'inactive') rec.stop();
+      await stopped;
+      stream.getTracks().forEach((t) => t.stop());
+      this.dprCap = cap;
+      this.resize();
+      this.recording = false;
+      if (!this.disposed && (this.mode as Mode) === 'mosaic') this.cam.flyTo(this.portraitPose(), 1.2);
+    }
+    if (!chunks.length) return null;
+    return { blob: new Blob(chunks, { type: type.split(';')[0] }), ext: type.startsWith('video/mp4') ? 'mp4' : 'webm' };
   }
 
   // ── frame ────────────────────────────────────────────────────────────
@@ -632,6 +698,7 @@ export class VerseEngine {
         this.mode = 'mosaic';
         this.pulse = 1;
         this.events.onAssembled?.();
+        this.assembledWaiters.splice(0).forEach((r) => r());
       }
     } else if (this.mode === 'disassembling') {
       this.morph = Math.max(0, this.morph - dt / (rm ? 0.01 : 3.2));
@@ -657,7 +724,7 @@ export class VerseEngine {
     // Hover.
     if (this.pointer.moved || this.cam.flying || this.spinRate > 0.01) {
       this.pointer.moved = false;
-      if (!this.pointer.inside || this.drag?.moved || this.pinch) {
+      if (!this.pointer.inside || this.drag?.moved || this.pinch || this.recording) {
         this.setHover(-1, -1);
       } else if (this.mode === 'mosaic') {
         const cell = this.mosaicCellAt(this.pointer.x, this.pointer.y);
@@ -828,6 +895,7 @@ export class VerseEngine {
 
   dispose(): void {
     this.disposed = true;
+    this.assembledWaiters.splice(0).forEach((r) => r());
     cancelAnimationFrame(this.raf);
     this.resizeObs.disconnect();
     const c = this.canvas;

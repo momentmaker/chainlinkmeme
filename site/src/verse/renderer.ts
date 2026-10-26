@@ -395,8 +395,10 @@ export class Renderer {
   }
 
   resize(cssW: number, cssH: number, dpr: number): void {
-    const w = Math.max(1, Math.round(cssW * dpr));
-    const h = Math.max(1, Math.round(cssH * dpr));
+    // Even dimensions: H.264 won't encode odd ones, and clips are recorded
+    // straight off this canvas.
+    const w = Math.max(2, Math.round((cssW * dpr) / 2) * 2);
+    const h = Math.max(2, Math.round((cssH * dpr) / 2) * 2);
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
       this.canvas.height = h;

@@ -93,6 +93,11 @@ scene is one instanced quad, a fullscreen pass and some sprites.
    they're exact and independent of the viewport: a 1024² PFP (transparent
    outside the hex) and a 2048×2304 poster.
 
+6. **Clips**: `recordAssemble()` replays the assembly from the galaxy under a
+   slow push-in and films the canvas with `MediaRecorder` (MP4/H.264 where
+   supported, else WebM), capped at 1920px on the long side, with the
+   adaptive quality frozen so the resolution never changes mid-stream.
+
 Privacy: the photo is never uploaded. Nothing in the flow makes a network
 request except loading the atlas.
 

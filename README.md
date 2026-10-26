@@ -43,7 +43,7 @@ Every meme in the archive as a hex tile in one WebGL 2 galaxy.
 - **Deep links**: `#m=<slug>` (every permalink has a "find it in the memeverse" button), `#tag=pepe`, `#tour`, `#assemble`, and `#callsign=rory-clippy-fud`, which flies a [ccip.dev LinkMarine](https://ccip.dev/marines/) through the three dog-tag tags their callsign was drawn from.
 
 ### Assemble (`/verse/#assemble`)
-Drop in a photo (or take a selfie, or pick a meme, or the chainlink mark) and the galaxy pours out of its orbits to rebuild it as a honeycomb portrait made of the archive. Download it as a hex PFP or a poster, or share it.
+Drop in a photo (or take a selfie, or pick a meme, or the chainlink mark) and the galaxy pours out of its orbits to rebuild it as a honeycomb portrait made of the archive. Download it as a hex PFP or a poster, share it, or **record a clip** of the galaxy assembling it (MP4 where the browser can encode it, WebM otherwise; filmed straight off the canvas, no UI).
 
 - Each hex is described the way the build describes every meme: mean CIE Lab colour over a 4×4 grid of bins inside the hex. The matcher shortlists by mean colour, picks by the full description, makes reuse progressively more expensive and never repeats a meme next to itself, so a face comes out of ~900 different memes rather than a few beige ones.
 - A blend slider shifts each tile towards the photo's colour while keeping part of the meme's own contrast; the 3D view and the downloads apply the same maths.

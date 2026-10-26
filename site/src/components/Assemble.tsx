@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AtlasMeta } from '../lib/atlas-format';
 import { SQRT3 } from '../lib/atlas-format';
-import type { VerseEngine, VerseMeme } from '../verse/engine';
+import { VerseEngine, type VerseMeme } from '../verse/engine';
 import { chainlinkMark, imageFromFile, imageFromMeme, loadFeatures, sourceSize } from '../verse/assets';
 import {
   buildResult,
@@ -313,6 +313,29 @@ export default function Assemble({ open, onClose, engine, memes, atlas, atlasBas
     return toBlob(c);
   };
 
+  const [canClip] = useState(() => !!VerseEngine.clipType());
+
+  const recordClip = async () => {
+    if (!engine || exporting) return;
+    setExporting('clip');
+    try {
+      const clip = await engine.recordAssemble();
+      if (!clip) return;
+      const name = `memeverse-assemble.${clip.ext}`;
+      const file = new File([clip.blob], name, { type: clip.blob.type });
+      // Phones: straight into the share sheet (X, Telegram, Photos…).
+      if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], text: `assembled from ${result?.distinct.toLocaleString()} chainlink memes ⬢` });
+      } else {
+        download(clip.blob, name);
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') console.error('[assemble clip]', err);
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const exportAs = async (kind: 'pfp' | 'poster' | 'share') => {
     if (exporting) return;
     setExporting(kind);
@@ -440,6 +463,11 @@ export default function Assemble({ open, onClose, engine, memes, atlas, atlasBas
           <div className="asm-hud-row">
             <button type="button" className="verse-pill primary" onClick={() => exportAs('pfp')} disabled={!mosaicLive || !!exporting}>{exporting === 'pfp' ? 'rendering…' : 'download pfp'}</button>
             <button type="button" className="verse-pill" onClick={() => exportAs('poster')} disabled={!mosaicLive || !!exporting}>{exporting === 'poster' ? 'rendering…' : 'poster'}</button>
+            {canClip && (
+              <button type="button" className={`verse-pill ${exporting === 'clip' ? 'rec' : ''}`} onClick={recordClip} disabled={!mosaicLive || !!exporting} title="film the galaxy assembling your picture">
+                {exporting === 'clip' ? '● recording…' : 'record clip'}
+              </button>
+            )}
             <button type="button" className="verse-pill" onClick={() => exportAs('share')} disabled={!mosaicLive || !!exporting}>{exporting === 'share' ? 'rendering…' : 'share'}</button>
             <label className="asm-tint" title="how strongly each meme leans towards your photo's colour">
               <span>blend</span>

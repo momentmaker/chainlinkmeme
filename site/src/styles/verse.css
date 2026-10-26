@@ -482,6 +482,8 @@ html:has(body.bare) {
 .verse-pill:disabled { opacity: 0.45; cursor: default; }
 .verse-pill.primary { background: var(--v-blue); border-color: rgba(170, 200, 255, 0.55); }
 .verse-pill.primary:hover:not(:disabled) { background: #3d70ef; }
+.verse-pill.rec { opacity: 1 !important; color: #ff8a8a !important; border-color: rgba(255, 120, 120, 0.6); animation: verse-rec 1s ease-in-out infinite; }
+@keyframes verse-rec { 50% { border-color: rgba(255, 120, 120, 0.15); } }
 .verse-panel-nav {
   display: flex;
   align-items: center;
