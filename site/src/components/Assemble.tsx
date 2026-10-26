@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AtlasMeta } from '../lib/atlas-format';
 import { SQRT3 } from '../lib/atlas-format';
-import { VerseEngine, type VerseMeme } from '../verse/engine';
+import { VerseEngine, type Mode, type VerseMeme } from '../verse/engine';
 import { chainlinkMark, imageFromFile, imageFromMeme, loadFeatures, sourceSize } from '../verse/assets';
 import {
   buildResult,
@@ -23,7 +23,7 @@ interface Props {
   atlas: AtlasMeta;
   atlasBase: string;
   fromMeme: number | null;
-  mosaicLive: boolean;
+  mode: Mode;
   base: string;
 }
 
@@ -39,7 +39,8 @@ type Source = { img: CanvasImageSource; label: string };
 
 let sheetsPromise: Promise<Sheet[]> | null = null;
 
-export default function Assemble({ open, onClose, engine, memes, atlas, atlasBase, fromMeme, mosaicLive, base }: Props) {
+export default function Assemble({ open, onClose, engine, memes, atlas, atlasBase, fromMeme, mode, base }: Props) {
+  const mosaicLive = mode === 'mosaic';
   const [source, setSource] = useState<Source | null>(null);
   const [crop, setCrop] = useState({ cx: 0.5, cy: 0.5, zoom: 1 });
   const [cols, setCols] = useState<number>(60);
@@ -49,7 +50,6 @@ export default function Assemble({ open, onClose, engine, memes, atlas, atlasBas
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MosaicResult | null>(null);
-  const [assembling, setAssembling] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const previewRef = useRef<HTMLCanvasElement | null>(null);
@@ -227,7 +227,6 @@ export default function Assemble({ open, onClose, engine, memes, atlas, atlasBas
       setResult(res);
       engine.setTint(tint);
       engine.assemble(res);
-      setAssembling(true);
       onClose();
     } catch (err) {
       console.error('[assemble]', err);
@@ -237,7 +236,6 @@ export default function Assemble({ open, onClose, engine, memes, atlas, atlasBas
     }
   };
 
-  useEffect(() => { if (mosaicLive) setAssembling(false); }, [mosaicLive]);
   useEffect(() => { engine?.setTint(tint); }, [tint, engine]);
 
   const sheets = () => (sheetsPromise ??= loadSheets(sheetUrls()).catch((e) => { sheetsPromise = null; throw e; }));
@@ -361,7 +359,10 @@ export default function Assemble({ open, onClose, engine, memes, atlas, atlasBas
     }
   };
 
-  const hud = (assembling || mosaicLive) && result;
+  const recording = exporting === 'clip';
+  // The toolbar belongs to the portrait: up while it assembles and stands,
+  // gone as soon as it starts flying back to the galaxy.
+  const hud = (mode === 'assembling' || mode === 'mosaic') && result;
 
   return (
     <>
@@ -456,7 +457,7 @@ export default function Assemble({ open, onClose, engine, memes, atlas, atlasBas
       {hud && (
         <div className="asm-hud" role="toolbar" aria-label="assembled picture">
           <p className="asm-hud-title">
-            {mosaicLive
+            {mosaicLive || recording
               ? <>assembled from <strong>{result.distinct.toLocaleString()}</strong> different memes · <span>{result.cells.length.toLocaleString()} hexes</span></>
               : <>link marines, assemble…</>}
           </p>
@@ -473,8 +474,8 @@ export default function Assemble({ open, onClose, engine, memes, atlas, atlasBas
               <span>blend</span>
               <input type="range" min={0} max={1} step={0.01} value={tint} onChange={(e) => setTint(Number(e.target.value))} />
             </label>
-            <button type="button" className="verse-pill" onClick={() => engine?.replayAssemble()} disabled={!mosaicLive}>replay</button>
-            <button type="button" className="verse-pill" onClick={() => { engine?.disassemble(); }}>back to the galaxy</button>
+            <button type="button" className="verse-pill" onClick={() => engine?.replayAssemble()} disabled={!mosaicLive || !!exporting}>replay</button>
+            <button type="button" className="verse-pill" onClick={() => { engine?.disassemble(); }} disabled={recording}>back to the galaxy</button>
           </div>
         </div>
       )}

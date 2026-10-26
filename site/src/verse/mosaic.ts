@@ -10,7 +10,7 @@
 //
 // Everything runs in the browser: the photo never leaves the device.
 
-import { BINS, FEAT_DIM, SQRT3, TILE, hexFeatures, insideHex, tileOrigin } from '../lib/atlas-format';
+import { BINS, FEAT_DIM, HEX_U0, SQRT3, TILE, hexFeatures, insideHex, tileOrigin } from '../lib/atlas-format';
 import { mulberry32 } from './math';
 
 export type MosaicShape = 'hex' | 'square';
@@ -356,7 +356,6 @@ export function rasterize(result: MosaicResult, sheets: Sheet[], tileRgb: [numbe
   const aa = unit * 1.2;
   const hw = (rIn * SQRT3) / 2;
   const [bgR, bgG, bgB, bgA] = opts.background;
-  const U0 = (1 - SQRT3 / 2) / 2;
 
   const sample = (tile: number, u: number, v: number, o: number[]) => {
     const { page, x, y } = tileOrigin(tile);
@@ -397,7 +396,7 @@ export function rasterize(result: MosaicResult, sheets: Sheet[], tileRgb: [numbe
       if (cov > 0 && cell) {
         const lu = (u - cell.u) / rIn; // -0.866..0.866
         const lv = (v - cell.v) / rIn; // -1..1
-        const tu = U0 + (lu / (SQRT3 / 2) * 0.5 + 0.5) * (1 - 2 * U0);
+        const tu = HEX_U0 + (lu / (SQRT3 / 2) * 0.5 + 0.5) * (1 - 2 * HEX_U0);
         const tv = 0.5 - lv * 0.5;
         sample(cell.tile, tu, tv, px);
         const tc = tileRgb[cell.tile]!;

@@ -32,8 +32,7 @@ export interface EngineEvents {
   onTour?(system: StarSystem | null): void;
   onIntroDone?(): void;
   onLabelClick?(tag: string): void;
-  onAssembled?(): void;
-  onDisassembled?(): void;
+  onMode?(mode: Mode): void;
   onContextLost?(): void;
 }
 
@@ -44,7 +43,7 @@ export interface EngineOptions {
   hiResUrl: (meme: VerseMeme) => string;
 }
 
-type Mode = 'galaxy' | 'assembling' | 'mosaic' | 'disassembling';
+export type Mode = 'galaxy' | 'assembling' | 'mosaic' | 'disassembling';
 
 const TOUR_HOLD = 6.5;
 const FOCUS_DIST = 8.5;
@@ -256,6 +255,9 @@ export class VerseEngine {
         if (d > 0 && this.pinch.d > 0) this.cam.zoom(this.pinch.d / d);
         this.cam.pan(mx - this.pinch.mx, my - this.pinch.my, this.cssH);
         this.pinch = { d, mx, my };
+        // Keep the finger that started the drag current, so lifting the
+        // other one doesn't orbit by everything it moved during the pinch.
+        if (this.drag?.id === e.pointerId) { this.drag.x = e.clientX; this.drag.y = e.clientY; }
         this.touched();
         return;
       }
@@ -397,6 +399,15 @@ export class VerseEngine {
     return this.mode;
   }
 
+  private setMode(m: Mode): void {
+    if (this.mode === m) return;
+    this.mode = m;
+    this.events.onMode?.(m);
+    // Anyone filming the assembly stops waiting once it lands — or once
+    // it's abandoned.
+    if (m !== 'assembling') this.assembledWaiters.splice(0).forEach((r) => r());
+  }
+
   get filterSet(): ReadonlySet<number> | null {
     return this.filter;
   }
@@ -476,6 +487,7 @@ export class VerseEngine {
     this.filter = set && set.size ? set : null;
     for (let i = 0; i < this.memes.length; i++) this.state[i] = this.filter?.has(i) ? 1 : 0;
     this.stateDirty = true;
+    this.systemLit = this.layout.systems.map((s) => !!this.filter && s.members.some((i) => this.filter!.has(i)));
     if (!this.filter || !fly || this.mode !== 'galaxy') return;
     if (this.focus >= 0) this.clearFocus({ pullBack: false });
     // Fit a sphere around the matches as they stand right now.
@@ -487,10 +499,13 @@ export class VerseEngine {
   }
 
   warpRandom(pool?: number[]): number {
-    const n = this.memes.length;
-    const candidates = pool && pool.length ? pool : null;
-    let i = candidates ? candidates[Math.floor(Math.random() * candidates.length)]! : Math.floor(Math.random() * n);
-    if (i === this.focus && n > 1) i = (i + 1) % n;
+    const all = pool && pool.length ? pool : null;
+    const n = all ? all.length : this.memes.length;
+    const at = (k: number) => (all ? all[k]! : k);
+    // Never warp to where you already are; stay inside the pool.
+    let k = Math.floor(Math.random() * n);
+    if (at(k) === this.focus && n > 1) k = (k + 1 + Math.floor(Math.random() * (n - 1))) % n;
+    const i = at(k);
     if (this.focus >= 0) this.focus = -1;
     this.focusMeme(i, { warp: true });
     return i;
@@ -560,7 +575,7 @@ export class VerseEngine {
     this.plane = { origin, right, up, normal, tileR: result.r * 0.93 };
     this.mosaic = result;
     this.renderer.setMosaic(result.cells, this.plane);
-    this.mode = 'assembling';
+    this.setMode('assembling');
     this.morph = 0;
     this.spinRate = 0;
     this.cam.flyTo(this.portraitPose(), this.opts.reducedMotion ? 0 : 2.8);
@@ -584,17 +599,17 @@ export class VerseEngine {
   }
 
   disassemble(): void {
-    if (this.mode === 'galaxy' || this.mode === 'disassembling') return;
+    if (this.mode === 'galaxy' || this.mode === 'disassembling' || this.recording) return;
     if (this.focus >= 0) this.clearFocus({ pullBack: false });
-    this.mode = 'disassembling';
+    this.setMode('disassembling');
     this.events.onHover?.(null);
     this.hoverClone = -1;
     this.cam.flyTo(this.overview(), this.opts.reducedMotion ? 0 : 3.2);
   }
 
   replayAssemble(): void {
-    if (!this.mosaic) return;
-    this.mode = 'assembling';
+    if (!this.mosaic || this.recording) return;
+    this.setMode('assembling');
     this.morph = 0;
   }
 
@@ -632,7 +647,7 @@ export class VerseEngine {
     this.cam.pose = { ...pose, target: [...pose.target] as Vec3, dist: pose.dist * 1.32 };
     this.cam.goal = { ...this.cam.pose, target: [...pose.target] as Vec3 };
     this.cam.flyTo(pose, 6.4);
-    this.mode = 'assembling';
+    this.setMode('assembling');
     this.morph = 0;
 
     const stream = this.canvas.captureStream(30);
@@ -642,8 +657,13 @@ export class VerseEngine {
     const stopped = new Promise<void>((r) => { rec.onstop = () => r(); });
     try {
       rec.start(500);
-      await new Promise<void>((r) => this.assembledWaiters.push(r));
-      await new Promise((r) => setTimeout(r, 1800));
+      // The assembly runs ~5.5s of engine time; a slow device stretches
+      // that, but never past a minute.
+      await new Promise<void>((r) => {
+        this.assembledWaiters.push(r);
+        setTimeout(r, 60_000);
+      });
+      if ((this.mode as Mode) === 'mosaic') await new Promise((r) => setTimeout(r, 1800));
     } finally {
       if (rec.state !== 'inactive') rec.stop();
       await stopped;
@@ -695,19 +715,16 @@ export class VerseEngine {
     if (this.mode === 'assembling') {
       this.morph = Math.min(1, this.morph + dt / (rm ? 0.01 : 5.5));
       if (this.morph >= 1) {
-        this.mode = 'mosaic';
         this.pulse = 1;
-        this.events.onAssembled?.();
-        this.assembledWaiters.splice(0).forEach((r) => r());
+        this.setMode('mosaic');
       }
     } else if (this.mode === 'disassembling') {
       this.morph = Math.max(0, this.morph - dt / (rm ? 0.01 : 3.2));
       if (this.morph <= 0) {
-        this.mode = 'galaxy';
         this.renderer.clearMosaic();
         this.mosaic = null;
         this.plane = null;
-        this.events.onDisassembled?.();
+        this.setMode('galaxy');
       }
     }
     this.pulse *= Math.exp(-dt * 1.6);
@@ -852,6 +869,8 @@ export class VerseEngine {
   }
 
   private labelW: number[] = [];
+  private labelOrder: number[] = [];
+  private systemLit: boolean[] = [];
 
   // Pin each system's label above its disc. Labels fade in once a disc is
   // big enough to be worth naming and out again when you're inside it;
@@ -861,8 +880,11 @@ export class VerseEngine {
     const k = this.cam.proj[5]! * (this.cssH / 2);
     const hideAll = this.mode !== 'galaxy' || this.focus >= 0 || (!this.introDone && this.time < 2.5);
     const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
-    const order = this.layout.systems.map((s, idx) => ({ s, idx })).sort((a, b) => b.s.members.length - a.s.members.length);
-    for (const { s, idx } of order) {
+    if (!this.labelOrder.length) {
+      this.labelOrder = this.layout.systems.map((_, i) => i).sort((a, b) => this.layout.systems[b]!.members.length - this.layout.systems[a]!.members.length);
+    }
+    for (const idx of this.labelOrder) {
+      const s = this.layout.systems[idx]!;
       const el = this.labels[idx]!;
       const c = systemCenterAt(s, this.galaxyAngle);
       const cx = m[0]! * c[0] + m[4]! * c[1] + m[8]! * c[2] + m[12]!;
@@ -875,7 +897,7 @@ export class VerseEngine {
         x = (cx / cw + 1) * (this.cssW / 2);
         y = (1 - cy / cw) * (this.cssH / 2) - Math.min(rpx * 0.62, this.cssH * 0.3) - 12;
         alpha = smoothstep(16, 42, rpx) * (1 - smoothstep(this.cssH * 0.45, this.cssH * 0.9, rpx));
-        if (this.filter) alpha *= s.members.some((i) => this.filter!.has(i)) ? 1 : 0.25;
+        if (this.filter) alpha *= this.systemLit[idx] ? 1 : 0.25;
         if (alpha > 0.02) {
           const w = (this.labelW[idx] ||= el.offsetWidth || s.tag.length * 8 + 44);
           const box = { x0: x - w / 2 - 4, x1: x + w / 2 + 4, y0: y - 26, y1: y + 2 };

@@ -3,7 +3,7 @@ import type { Manifest, MemeEntry } from '../lib/manifest';
 import type { AtlasMeta } from '../lib/atlas-format';
 import { apiUrl, fullUrl, memeUrl, permalinkUrl } from '../lib/meme-url';
 import { filterMemes } from '../lib/search';
-import { VerseEngine, type HoverInfo, type VerseMeme } from '../verse/engine';
+import { VerseEngine, type HoverInfo, type Mode, type VerseMeme } from '../verse/engine';
 import type { StarSystem } from '../verse/layout';
 import { loadAtlasMeta } from '../verse/assets';
 import Assemble from './Assemble';
@@ -40,9 +40,14 @@ function readHash(): Record<string, string> {
   const out: Record<string, string> = {};
   const h = location.hash.replace(/^#/, '');
   if (!h) return out;
+  // A shared link can carry a broken escape (#tag=100%); keep it raw
+  // rather than throw.
+  const decode = (x: string) => {
+    try { return decodeURIComponent(x); } catch { return x; }
+  };
   for (const part of h.split('&')) {
     const [k, v = ''] = part.split('=');
-    if (k) out[decodeURIComponent(k)] = decodeURIComponent(v);
+    if (k) out[decode(k)] = decode(v);
   }
   return out;
 }
@@ -79,7 +84,8 @@ export default function Verse({ manifestUrl, atlasBase, base }: Props) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [assembleOpen, setAssembleOpen] = useState(false);
   const [assembleFrom, setAssembleFrom] = useState<number | null>(null);
-  const [mosaicLive, setMosaicLive] = useState(false);
+  const [mode, setMode] = useState<Mode>('galaxy');
+  const mosaicLive = mode === 'mosaic';
   const [callsign, setCallsign] = useState<{ tags: string[]; active: number; name: string } | null>(null);
   const [reactions, setReactions] = useState<Record<string, ReactionCounts> | null>(null);
   const [narrow, setNarrow] = useState(false);
@@ -160,8 +166,7 @@ export default function Verse({ manifestUrl, atlasBase, base }: Props) {
           const sys = engineRef.current?.systemByTag(tag);
           if (sys) engineRef.current?.focusSystem(sys);
         },
-        onAssembled: () => setMosaicLive(true),
-        onDisassembled: () => setMosaicLive(false),
+        onMode: (m) => setMode(m),
         onContextLost: () => setStatus('error'),
       }, {
         reducedMotion: reducedMotion(),
@@ -415,7 +420,7 @@ export default function Verse({ manifestUrl, atlasBase, base }: Props) {
   const rs = focusMeme && reactions ? reactions[focusMeme.slug] : undefined;
 
   return (
-    <div className={`verse-root ${focus !== null ? 'has-focus' : ''} ${mosaicLive ? 'has-mosaic' : ''}`}>
+    <div className={`verse-root ${focus !== null ? 'has-focus' : ''} ${mode !== 'galaxy' ? 'has-mosaic' : ''}`}>
       <canvas ref={canvasRef} className="verse-canvas" aria-label="The memeverse: every chainlink meme as a star in a 3D galaxy" />
       <div ref={labelsRef} className="verse-labels" />
 
@@ -452,11 +457,11 @@ export default function Verse({ manifestUrl, atlasBase, base }: Props) {
           {stats && <span className="verse-title-sub">{stats.memes.toLocaleString()} memes · {stats.systems || '…'} star systems</span>}
         </div>
         <div className="verse-actions">
-          <button type="button" className="verse-btn" onClick={() => { setTouched(true); const e = engineRef.current; e?.warpRandom(e.filterSet ? [...e.filterSet] : undefined); }} title="warp to a random meme (r)" disabled={status !== 'ready' || mosaicLive}>
+          <button type="button" className="verse-btn" onClick={() => { setTouched(true); const e = engineRef.current; e?.warpRandom(e.filterSet ? [...e.filterSet] : undefined); }} title="warp to a random meme (r)" disabled={status !== 'ready' || mode !== 'galaxy'}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" /></svg>
             <span>warp</span>
           </button>
-          <button type="button" className={`verse-btn ${tour ? 'on' : ''}`} onClick={() => { const e = engineRef.current; if (!e) return; setTouched(true); if (e.isTouring) e.stopTour(); else e.startTour(); }} title="autopilot tour (t)" disabled={status !== 'ready' || mosaicLive}>
+          <button type="button" className={`verse-btn ${tour ? 'on' : ''}`} onClick={() => { const e = engineRef.current; if (!e) return; setTouched(true); if (e.isTouring) e.stopTour(); else e.startTour(); }} title="autopilot tour (t)" disabled={status !== 'ready' || mode !== 'galaxy'}>
             <svg viewBox="0 0 24 24" aria-hidden="true">{tour ? <path d="M7 5h4v14H7zM13 5h4v14h-4z" /> : <path d="M7 4.5v15l12-7.5-12-7.5Z" />}</svg>
             <span>{tour ? 'stop' : 'tour'}</span>
           </button>
@@ -464,7 +469,7 @@ export default function Verse({ manifestUrl, atlasBase, base }: Props) {
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 20.2 7.25v9.5L12 21.5l-8.2-4.75v-9.5L12 2.5Z" /><path d="M12 8.2 15.3 10.1v3.8L12 15.8l-3.3-1.9v-3.8L12 8.2Z" /></svg>
             <span>assemble</span>
           </button>
-          <button type="button" className="verse-btn icon" onClick={() => engineRef.current?.flyHome()} title="back to the overview (h)" disabled={status !== 'ready' || mosaicLive}>
+          <button type="button" className="verse-btn icon" onClick={() => engineRef.current?.flyHome()} title="back to the overview (h)" disabled={status !== 'ready' || mode !== 'galaxy'}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></svg>
           </button>
           <button type="button" className="verse-btn icon" onClick={toggleFullscreen} title="fullscreen (f)">
@@ -476,7 +481,7 @@ export default function Verse({ manifestUrl, atlasBase, base }: Props) {
         </div>
       </header>
 
-      {!mosaicLive && (
+      {mode === 'galaxy' && (
         <div className="verse-search">
           <form
             onSubmit={(ev) => {
@@ -645,7 +650,7 @@ export default function Verse({ manifestUrl, atlasBase, base }: Props) {
           atlas={atlas}
           atlasBase={atlasBase}
           fromMeme={assembleFrom}
-          mosaicLive={mosaicLive}
+          mode={mode}
           base={base}
         />
       )}

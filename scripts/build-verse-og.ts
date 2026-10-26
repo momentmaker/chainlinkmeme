@@ -7,13 +7,14 @@
 // on the CPU and composited with sharp, with the type set by resvg in the
 // vendored Inter. Runs after build-atlas.ts; cheap enough to run every build.
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
 import { Resvg } from '@resvg/resvg-js';
-import { TILE, tileOrigin, type AtlasMeta } from '../site/src/lib/atlas-format';
-import { buildLayout, positionAt } from '../site/src/verse/layout';
-import { lookAt, multiply, perspective, type Vec3 } from '../site/src/verse/math';
+import { HEX_U0, TILE, tileOrigin, type AtlasMeta } from '../site/src/lib/atlas-format';
+import { buildLayout, positionAt, type GalaxyLayout } from '../site/src/verse/layout';
+import { lookAt, mulberry32, multiply, perspective, type Vec3 } from '../site/src/verse/math';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const MANIFEST_PATH = path.join(ROOT, 'site', 'public', 'manifest.json');
@@ -22,6 +23,7 @@ const OG_DIR = path.join(ROOT, 'site', 'public', 'og');
 const FONT_PATH = path.join(ROOT, 'scripts', 'assets', 'Inter-Bold.ttf');
 // Bump when the look of either image changes.
 const STAMP_VERSION = 1;
+const LAYOUT_SOURCES = ['site/src/verse/layout.ts', 'site/src/verse/math.ts'].map((f) => path.join(ROOT, f));
 
 interface Meme { slug: string; tags: string[] }
 
@@ -34,16 +36,6 @@ interface Shot {
   shift: [number, number]; // where the galaxy centre lands, as a fraction of the frame
 }
 
-function rng(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(a ^ (a >>> 15), a | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 function hexPoints(cx: number, cy: number, r: number): string {
   const hw = (r * Math.sqrt(3)) / 2;
   return [
@@ -54,12 +46,11 @@ function hexPoints(cx: number, cy: number, r: number): string {
 
 async function render(
   shot: Shot,
-  memes: Meme[],
+  layout: GalaxyLayout,
   atlas: AtlasMeta,
   sheets: { data: Buffer; width: number }[],
 ): Promise<sharp.Sharp> {
   const { width: W, height: H } = shot;
-  const layout = buildLayout(memes, atlas.colors);
   const ext = layout.extent;
   const dist = ext * shot.dist;
   const cp = Math.cos(shot.pitch);
@@ -77,7 +68,7 @@ async function render(
     return { x: (cx / cw + 1) * (W / 2) + ox, y: (1 - cy / cw) * (H / 2) + oy, w: cw };
   };
 
-  const rand = rng(42);
+  const rand = mulberry32(42);
   // Sky, stars and the dust disc as one SVG underlay.
   let sky = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
   <defs>
@@ -123,12 +114,12 @@ async function render(
 
   // Tiles, far to near. Tiny ones become coloured stars in one SVG layer;
   // anything bigger than a few pixels gets its real hex-cropped tile.
-  const placed = memes.map((_, i) => ({ i, s: toScreen(positionAt(layout, i, 0, 0)) }))
+  const placed = atlas.slugs.map((_, i) => ({ i, s: toScreen(positionAt(layout, i, 0, 0)) }))
     .filter((t) => t.s.w > 1)
     .sort((a, b) => b.s.w - a.s.w);
   let stars = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><filter id="g" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="1.6"/></filter></defs>`;
   const composites: sharp.OverlayOptions[] = [];
-  const U0 = Math.round(TILE * (1 - Math.sqrt(3) / 2) / 2);
+  const U0 = Math.round(TILE * HEX_U0);
   for (const { i, s } of placed) {
     const pr = k / s.w; // tile circumradius in px
     if (pr < 3.2) {
@@ -200,13 +191,17 @@ async function main(): Promise<void> {
     const { data, info } = await sharp(path.join(ATLAS_DIR, `tiles-${p}.webp`)).removeAlpha().raw().toBuffer({ resolveWithObject: true });
     return { data, width: info.width };
   }));
-  const systems = buildLayout(memes, atlas.colors).systems.length;
+  const layout = buildLayout(memes, atlas.colors);
+  const systems = layout.systems.length;
   fs.mkdirSync(OG_DIR, { recursive: true });
 
   // Skip when the atlas hasn't changed since the last render and both
   // outputs are still on disk (CI restores og/ and atlas/ from separate caches).
   const stamp = path.join(ATLAS_DIR, 'verse-og.stamp');
-  const want = `${STAMP_VERSION}:${atlas.signature}`;
+  // The images follow the atlas *and* the layout code, so both go in.
+  const code = crypto.createHash('sha1');
+  for (const f of LAYOUT_SOURCES) code.update(fs.readFileSync(f));
+  const want = `${STAMP_VERSION}:${atlas.signature}:${code.digest('hex')}`;
   if (
     fs.existsSync(stamp) && fs.readFileSync(stamp, 'utf8') === want
     && fs.existsSync(path.join(OG_DIR, '_verse.png')) && fs.existsSync(path.join(ATLAS_DIR, 'banner.webp'))
@@ -216,7 +211,7 @@ async function main(): Promise<void> {
   }
 
   // Unfurl card: galaxy on the right, title on the left.
-  const og = await render({ width: 1200, height: 630, yaw: 0.35, pitch: 0.6, dist: 1.02, shift: [0.66, 0.55] }, memes, atlas, sheets);
+  const og = await render({ width: 1200, height: 630, yaw: 0.35, pitch: 0.6, dist: 1.02, shift: [0.66, 0.55] }, layout, atlas, sheets);
   const ogBase = await og.png().toBuffer();
   const ogText = text(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630">
     <defs>
@@ -237,7 +232,7 @@ async function main(): Promise<void> {
   await sharp(ogBase).composite([{ input: ogText }]).png({ compressionLevel: 9 }).toFile(path.join(OG_DIR, '_verse.png'));
 
   // Home banner: wider, no type (the page sets it in HTML).
-  const banner = await render({ width: 1600, height: 520, yaw: 0.3, pitch: 0.5, dist: 0.9, shift: [0.68, 0.56] }, memes, atlas, sheets);
+  const banner = await render({ width: 1600, height: 520, yaw: 0.3, pitch: 0.5, dist: 0.9, shift: [0.68, 0.56] }, layout, atlas, sheets);
   await banner.webp({ quality: 80 }).toFile(path.join(ATLAS_DIR, 'banner.webp'));
   fs.writeFileSync(stamp, want);
   console.log('[verse-og] wrote og/_verse.png and atlas/banner.webp');
