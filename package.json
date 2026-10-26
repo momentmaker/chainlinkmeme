@@ -13,6 +13,7 @@
     "inline-jpegs": "tsx scripts/build-inline-jpegs.ts",
     "manifest": "tsx scripts/build-inline-jpegs.ts && tsx scripts/build-manifest.ts",
     "og": "tsx scripts/build-og-images.ts",
+    "atlas": "tsx scripts/build-atlas.ts && tsx scripts/build-verse-og.ts",
     "weekly": "tsx scripts/build-weekly.ts",
     "discord:register": "tsx scripts/register-discord-command.ts",
     "telegram:register": "tsx scripts/register-telegram-webhook.ts",

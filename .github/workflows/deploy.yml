@@ -94,6 +94,21 @@ jobs:
       - name: Build OG images
         run: pnpm og
 
+      # The memeverse's sprite sheets + mosaic features, then its unfurl card
+      # and home banner. Keyed like the OG cache; on a hit, build-atlas.ts
+      # sees its signature still matches the manifest and skips the ~25s
+      # re-pack, and build-verse-og.ts skips via its stamp.
+      - name: Cache meme atlas
+        uses: actions/cache@v5
+        with:
+          path: site/public/atlas
+          key: atlas-v1-${{ hashFiles('memes/**/*.toml', 'scripts/build-atlas.ts', 'scripts/build-verse-og.ts', 'site/src/lib/atlas-format.ts') }}
+          restore-keys: |
+            atlas-v1-
+
+      - name: Build meme atlas
+        run: pnpm atlas
+
       - name: Astro build
         env:
           PUBLIC_REPO_OWNER: ${{ github.repository_owner }}

@@ -2,7 +2,7 @@
 
 ⬢ A community-curated archive of Chainlink memes — [chainlinkme.me](https://chainlinkme.me).
 
-Browse, search, favorite, and react. Every meme has a permalink that unfurls beautifully in Discord, Twitter, and Telegram. A tag constellation maps the archive as a cosmos; weekly snapshots preserve the top 7 memes each week; a Discord slash command pulls memes into any server on demand.
+Browse, search, favorite, and react. Every meme has a permalink that unfurls beautifully in Discord, Twitter, and Telegram. The memeverse flies you through the whole archive as a 3D galaxy and can rebuild your face out of it; a tag constellation maps the archive as a cosmos; weekly snapshots preserve the top 7 memes each week; a Discord slash command pulls memes into any server on demand.
 
 ## Architecture
 
@@ -33,6 +33,21 @@ scripts/            # build-time + one-off tooling
 ```
 
 ## Features
+
+### The memeverse (`/verse`)
+Every meme in the archive as a hex tile in one WebGL 2 galaxy.
+
+- **Star systems**: every tag with 12+ memes becomes a spinning disc of tiles. Each meme lives in the system of its *rarest* qualifying tag, so the giant tags don't swallow the niche ones. Sergey holds the galactic core around a glowing chainlink hex; the other systems wind out along two spiral arms, each next to the system it shares the most memes with. Memes with no system drift on the outer rim.
+- **Stars that resolve into memes**: far away, a tile renders as a star of its average colour; fly closer and it becomes the meme. Tiles big on screen stream in a sharp 256px copy.
+- **Fly**: drag to orbit, scroll/pinch to zoom, right- or shift-drag to pan, click a meme to fly to it (info panel, reactions, prev/next through its system). `/` lights up a tag, `r` warps to a random meme, `t` starts an autopilot tour (good on a TV), `?` shows the keys.
+- **Deep links**: `#m=<slug>` (every permalink has a "find it in the memeverse" button), `#tag=pepe`, `#tour`, `#assemble`, and `#callsign=rory-clippy-fud`, which flies a [ccip.dev LinkMarine](https://ccip.dev/marines/) through the three dog-tag tags their callsign was drawn from.
+
+### Assemble (`/verse/#assemble`)
+Drop in a photo (or take a selfie, or pick a meme, or the chainlink mark) and the galaxy pours out of its orbits to rebuild it as a honeycomb portrait made of the archive. Download it as a hex PFP or a poster, or share it.
+
+- Each hex is described the way the build describes every meme: mean CIE Lab colour over a 4×4 grid of bins inside the hex. The matcher shortlists by mean colour, picks by the full description, makes reuse progressively more expensive and never repeats a meme next to itself, so a face comes out of ~900 different memes rather than a few beige ones.
+- A blend slider shifts each tile towards the photo's colour while keeping part of the meme's own contrast; the 3D view and the downloads apply the same maths.
+- It all runs in the browser. **The photo never leaves the device.**
 
 ### Gallery
 - Responsive JS masonry (1/2/3 columns), append-only so scrolling back up never reshuffles memes
@@ -91,7 +106,7 @@ Secrets (`X_API_KEY` / `X_API_SECRET` / `X_ACCESS_TOKEN` / `X_ACCESS_SECRET`) li
 Each permalink has a **save as sticker** button that exports to Signal-spec 512×512 — WebP for static memes, APNG for animated (≤300 KB, ≤3s loop). The APNG branch runs UPNG quantization entirely in-browser, adaptively dropping the color palette until it fits the 300 KB budget; the whole encoder bundle is lazy-loaded (~95 KB) and only ships when someone actually clicks the button. Drop the output straight into Signal, Telegram, Discord, or Slack.
 
 ### OG images
-Every meme has a pre-rendered 1200×630 OG card (baked by `scripts/build-og-images.ts` with Satori + Resvg, CI-cached by content hash). The home page has a custom 77-meme honeycomb mosaic.
+Every meme has a pre-rendered 1200×630 OG card (baked by `scripts/build-og-images.ts` with Satori + Resvg, CI-cached by content hash). The home page has a custom 77-meme honeycomb mosaic. The memeverse's card (`og/_verse.png`) and the home page's portal banner are the real galaxy layout, projected and composited by `scripts/build-verse-og.ts`.
 
 ### Honeycomb grid (`/grid`)
 Every meme in the archive, at once, as a single hex tessellation. Wheel to zoom, drag to pan, click any tile to open.
@@ -128,6 +143,7 @@ Useful workspace scripts:
 ```sh
 pnpm manifest                    # regenerate site/public/manifest.json from memes/*.toml
 pnpm og                          # rebuild OG images (cache-friendly)
+pnpm atlas                       # pack the memeverse's sprite sheets + mosaic features, render its OG card
 pnpm validate                    # PR-style schema + vocab + uniqueness checks
 pnpm weekly                      # compute this week's top-7 snapshot
 pnpm tweet:daily -- --dry-run    # preview today's daily post
@@ -155,7 +171,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full walkthrough.
 
 - Push to `main` → `deploy.yml` runs three jobs:
   1. `backfill-meta` — auto-fills `submitted_by` and `date_added` on new TOMLs, commits back
-  2. `build-and-deploy` — builds manifest, renders OG images, runs `astro build`, publishes to GitHub Pages
+  2. `build-and-deploy` — builds manifest, renders OG images, packs the memeverse atlas, runs `astro build`, publishes to GitHub Pages
   3. `deploy-worker` — ships the Worker via `wrangler deploy`
 - Weekly Monday 09:00 UTC → `weekly.yml` writes the new snapshot and commits it to `main`
 

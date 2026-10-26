@@ -1,0 +1,33 @@
+---
+import Base from '../layouts/Base.astro';
+import MemeVerse from '../components/Verse';
+import '../styles/verse.css';
+import manifestJson from '../../public/manifest.json';
+import type { Manifest } from '../lib/manifest';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const manifestHref = `${base}/manifest.json`;
+const atlasBase = `${base}/atlas`;
+const manifest = manifestJson as Manifest;
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://chainlinkme.me';
+const lastBuilt = manifest.generated_at?.slice(0, 10) || 'initial';
+const og = `${siteUrl}/og/_verse.png?v=${encodeURIComponent(lastBuilt)}`;
+---
+<Base
+  title="⬢ the memeverse — chainlink meme"
+  description={`Every Chainlink meme ever archived — ${manifest.memes.length.toLocaleString()} of them — as stars in one 3D galaxy. Fly through it, light up a tag, or assemble your own face out of memes.`}
+  ogImage={og}
+  ogImageAlt="The memeverse: a spiral galaxy made of chainlink memes"
+  bare
+  themeColor="#05070d"
+>
+  <Fragment slot="head-extra">
+    <link rel="preload" href={manifestHref} as="fetch" crossorigin="anonymous" />
+  </Fragment>
+  <MemeVerse client:only="react" manifestUrl={manifestHref} atlasBase={atlasBase} base={base} />
+  <noscript>
+    <p style="color:#cfd8ff;font:16px/1.5 sans-serif;padding:40px;text-align:center">
+      The memeverse needs JavaScript and WebGL 2. Browse the archive at <a href={`${base}/`}>chainlinkme.me</a>.
+    </p>
+  </noscript>
+</Base>
