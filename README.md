@@ -109,7 +109,7 @@ Each permalink has a **save as sticker** button that exports to Signal-spec 512�
 Every meme has a pre-rendered 1200×630 OG card (baked by `scripts/build-og-images.ts` with Satori + Resvg, CI-cached by content hash). The home page has a custom 77-meme honeycomb mosaic. The memeverse's card (`og/_verse.png`) and the home page's portal banner are the real galaxy layout, projected and composited by `scripts/build-verse-og.ts`.
 
 ### Honeycomb grid (`/grid`)
-Every meme in the archive, at once, as a single hex tessellation. Wheel to zoom, drag to pan, click any tile to open.
+Every meme in the archive, at once, as a single hex tessellation. Wheel to zoom, drag to pan, click any tile to open. Zoomed out, tiles come from the memeverse's sprite sheets (two images for the whole archive); full images take over as you zoom in.
 
 ### Shuffle mode (keyboard-only)
 Press `s` anywhere on the site for fullscreen one-meme-at-a-time mode. Space / → for next, ← for previous, Esc to exit. Unlisted — find it in the `?` help dialog.
