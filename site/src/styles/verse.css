@@ -6,6 +6,7 @@ body.bare {
   overflow: hidden;
   overscroll-behavior: none;
 }
+body.bare::before { display: none; }
 
 html:has(body.bare) {
   overflow: hidden;
