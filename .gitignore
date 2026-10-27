@@ -9,6 +9,7 @@ site/dist
 site/.astro
 site/public/manifest.json
 site/public/og
+site/public/atlas
 site/public/embeddings.bin
 worker/.wrangler
 worker/dist

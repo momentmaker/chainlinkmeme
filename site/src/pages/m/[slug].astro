@@ -108,6 +108,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
       <div class="permalink-actions">
         <button type="button" class="btn ghost" data-download data-url={memeUrl(meme.filename)} data-filename={meme.filename}>download</button>
         <button type="button" class="btn ghost" data-sticker data-url={memeUrl(meme.filename)} data-slug={meme.slug} data-animated={meme.animated ? '1' : '0'}>save as sticker</button>
+        <a class="btn ghost" href={`${base}/verse/#m=${encodeURIComponent(meme.slug)}`}>⬢ find it in the memeverse</a>
         <button type="button" class="btn ghost" data-embed data-embed-url={`${siteUrl}${base}/embed/${meme.slug}/`} data-permalink-url={`${siteUrl}${Astro.url.pathname}`} data-slug={meme.slug}>copy embed</button>
         <a class="btn ghost"
            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(displayTitle + ' — chainlinkme.me')}&url=${encodeURIComponent(siteUrl + Astro.url.pathname)}`}

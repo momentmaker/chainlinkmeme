@@ -71,6 +71,19 @@ const homeOg = `${siteUrl}/og/_home.png?v=${encodeURIComponent(lastBuilt || 'ini
     </a>
   )}
 
+  <div class="verse-portal" style={`--portal-bg: url(${base}/atlas/banner.webp?v=${encodeURIComponent(lastBuilt || 'initial')})`}>
+    <a class="verse-portal-link" href={`${base}/verse/`} aria-label="Enter the memeverse"></a>
+    <div class="verse-portal-copy">
+      <p class="verse-portal-eyebrow">⬢ new · the memeverse</p>
+      <h2 class="verse-portal-title">every chainlink meme, one galaxy</h2>
+      <p class="verse-portal-sub">Fly through all {stats.memes} memes in 3D — or assemble your own face out of them.</p>
+      <div class="verse-portal-ctas">
+        <a class="verse-portal-cta primary" href={`${base}/verse/`}>enter the memeverse →</a>
+        <a class="verse-portal-cta" href={`${base}/verse/#assemble`}>⬢ assemble yourself</a>
+      </div>
+    </div>
+  </div>
+
   <Gallery client:load manifestUrl={manifestHref} />
 
   <HexScrollTop client:load />

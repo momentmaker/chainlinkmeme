@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "astro dev",
-    "build": "tsx ../scripts/build-manifest.ts && tsx ../scripts/build-og-images.ts && astro build",
+    "build": "tsx ../scripts/build-manifest.ts && tsx ../scripts/build-og-images.ts && tsx ../scripts/build-atlas.ts && tsx ../scripts/build-verse-og.ts && astro build",
     "preview": "astro preview",
     "astro": "astro",
     "check": "astro check",

@@ -1,9 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Manifest, MemeEntry } from '../lib/manifest';
 import { memeUrl } from '../lib/meme-url';
+import { HEX_U0, TILE, tileOrigin, type AtlasMeta } from '../lib/atlas-format';
 
 interface Props {
   manifestUrl?: string;
+  atlasBase?: string;
+}
+
+// The memeverse's sprite sheets: every meme as a 64px tile on two images.
+// They let the zoomed-out honeycomb show every meme at once instead of
+// 1,800 empty hexes, until full images take over as you zoom in.
+interface AtlasState {
+  sheets: HTMLImageElement[];
+  index: Map<string, number>;
 }
 
 interface Tile {
@@ -66,7 +76,7 @@ function layoutTiles(memes: MemeEntry[]): { tiles: Tile[]; width: number; height
   return { tiles, width, height };
 }
 
-export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
+export default function Grid({ manifestUrl = '/manifest.json', atlasBase }: Props) {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [fetchFailed, setFetchFailed] = useState(false);
   const [hoverTile, setHoverTile] = useState<Tile | null>(null);
@@ -88,6 +98,28 @@ export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
     hoverTileRef.current = hoverTile;
     markDirtyRef.current();
   }, [hoverTile]);
+
+  const atlasRef = useRef<AtlasState | null>(null);
+  useEffect(() => {
+    if (!atlasBase || !manifest) return;
+    let cancelled = false;
+    const v = encodeURIComponent(manifest.generated_at ?? 'dev');
+    fetch(`${atlasBase}/atlas.json?v=${v}`)
+      .then((r) => (r.ok ? (r.json() as Promise<AtlasMeta>) : Promise.reject(new Error(String(r.status)))))
+      .then((meta) => {
+        if (cancelled) return;
+        const sheets = Array.from({ length: meta.pages }, (_, p) => {
+          const img = new Image();
+          img.decoding = 'async';
+          img.onload = () => markDirtyRef.current();
+          img.src = `${atlasBase}/tiles-${p}.webp?v=${v}`;
+          return img;
+        });
+        atlasRef.current = { sheets, index: new Map(meta.slugs.map((slug, i) => [slug, i])) };
+      })
+      .catch(() => { /* no atlas: hexes stay empty until zoomed, as before */ });
+    return () => { cancelled = true; };
+  }, [atlasBase, manifest]);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,6 +240,7 @@ export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
       );
 
       const tiles = visibleTiles();
+      const atlas = atlasRef.current;
       const tilePx = TILE_R * 2 * v.scale;
       const shouldLoad = tilePx >= IMAGE_LOAD_MIN_PX;
       for (const t of tiles) {
@@ -230,6 +263,18 @@ export default function Grid({ manifestUrl = '/manifest.json' }: Props) {
           const dh = nh * scale;
           ctx!.drawImage(img, t.x - dw / 2, t.y - dh / 2, dw, dh);
           ctx!.restore();
+        } else if (atlas) {
+          const ai = atlas.index.get(t.meme.slug);
+          const o = ai === undefined ? null : tileOrigin(ai);
+          const sheet = o ? atlas.sheets[o.page] : undefined;
+          if (o && sheet?.complete && sheet.naturalWidth > 0) {
+            ctx!.save();
+            hexPath(ctx!, t.x, t.y, TILE_R - 0.5);
+            ctx!.clip();
+            const u0 = HEX_U0 * TILE;
+            ctx!.drawImage(sheet, o.x + u0, o.y, TILE - 2 * u0, TILE, t.x - HEX_W / 2, t.y - TILE_R, HEX_W, TILE_R * 2);
+            ctx!.restore();
+          }
         }
 
         ctx!.strokeStyle = 'rgba(255,255,255,0.35)';

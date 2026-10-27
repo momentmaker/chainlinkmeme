@@ -17,7 +17,7 @@ const manifestHref = `${base}/manifest.json`;
       <h1 class="map-title">the archive, tessellated</h1>
       <p class="map-sub">every meme as a hex · scroll to zoom · drag to pan · click a tile to open</p>
     </header>
-    <HexGrid client:load manifestUrl={manifestHref} />
+    <HexGrid client:load manifestUrl={manifestHref} atlasBase={`${base}/atlas`} />
     <div class="map-footnote">
       <a href={`${base}/`} class="btn ghost">← back to gallery</a>
     </div>

@@ -241,6 +241,90 @@ a:hover { text-decoration: underline; }
 }
 .load-more-count strong { color: var(--brand-blue); font-weight: 700; }
 
+/* Memeverse portal — a window onto /verse under the meme-of-the-day hero.
+   Dark in both themes on purpose: it's a view into space, not page chrome.
+   The whole card is the link (an absolutely-positioned anchor under the
+   copy); the two CTAs sit above it for their own destinations. */
+.verse-portal {
+  position: relative;
+  min-height: 210px;
+  margin-bottom: 24px;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  color: #fff;
+  background:
+    linear-gradient(90deg, rgba(3, 5, 12, 0.94) 0%, rgba(3, 5, 12, 0.72) 38%, rgba(3, 5, 12, 0) 70%),
+    var(--portal-bg, none) right center / cover no-repeat,
+    #050814;
+  box-shadow: 0 0 0 1px rgba(74, 142, 255, 0.25), 0 10px 30px rgba(5, 10, 30, 0.25);
+  transition: transform 0.25s cubic-bezier(.2,.8,.2,1), box-shadow 0.25s ease;
+}
+.verse-portal:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 1px rgba(120, 170, 255, 0.55), 0 18px 44px rgba(47, 98, 223, 0.35);
+}
+.verse-portal-link { position: absolute; inset: 0; z-index: 1; }
+.verse-portal-copy { position: relative; z-index: 2; padding: 26px 28px; max-width: 520px; pointer-events: none; }
+.verse-portal-eyebrow {
+  margin: 0 0 8px;
+  font: 600 11px Menlo, Monaco, monospace;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6fa0ff;
+}
+.verse-portal-title {
+  margin: 0 0 8px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-shadow: 0 0 24px rgba(74, 142, 255, 0.55);
+}
+.verse-portal-sub { margin: 0 0 16px; color: #c3d0f5; font-size: 14px; line-height: 1.45; }
+.verse-portal-ctas { display: flex; flex-wrap: wrap; gap: 8px; pointer-events: auto; }
+.verse-portal-cta {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 160, 255, 0.4);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: none !important;
+}
+.verse-portal-cta:hover { background: rgba(47, 98, 223, 0.45); }
+.verse-portal-cta.primary { background: linear-gradient(135deg, #2f62df, #4a8eff); border-color: rgba(190, 215, 255, 0.6); box-shadow: 0 0 20px rgba(74, 142, 255, 0.45); }
+@media (max-width: 640px) {
+  .verse-portal { min-height: 260px; align-items: flex-end; }
+  .verse-portal {
+    background:
+      linear-gradient(0deg, rgba(3, 5, 12, 0.95) 0%, rgba(3, 5, 12, 0.6) 55%, rgba(3, 5, 12, 0.1) 100%),
+      var(--portal-bg, none) 70% center / cover no-repeat,
+      #050814;
+  }
+  .verse-portal-copy { padding: 20px; }
+  .verse-portal-title { font-size: 21px; }
+}
+
+/* Header shortcut into the memeverse: the one hex button with a pulse. */
+.hex-btn.verse-hex::before { background: linear-gradient(135deg, #2f62df, #8fb2ff); }
+.hex-btn.verse-hex::after { background: #0a1024; }
+.hex-btn.verse-hex { color: #8fb2ff; }
+.hex-btn.verse-hex:hover { color: #fff; }
+.hex-btn.verse-hex .hex-btn-label { animation: verse-hex-pulse 3.2s ease-in-out infinite; }
+@keyframes verse-hex-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(74, 142, 255, 0)); }
+  50% { filter: drop-shadow(0 0 5px rgba(120, 170, 255, 0.9)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hex-btn.verse-hex .hex-btn-label { animation: none; }
+  .verse-portal, .verse-portal:hover { transform: none; }
+}
+
 /* Most-liked strip — shows up under the hero once the community has voted. */
 .popular-strip { margin: 0 0 20px; }
 .popular-heading {
