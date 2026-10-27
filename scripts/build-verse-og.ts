@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
 import { Resvg } from '@resvg/resvg-js';
-import { BINS, FEAT_DIM, HERO_COLS, HERO_COUNT, HERO_TILE, HEX_U0, TILE, dequantizeFeatures, tileOrigin, type AtlasMeta } from '../site/src/lib/atlas-format';
+import { HERO_COLS, HERO_COUNT, HERO_TILE, HEX_U0, TILE, colorfulness, dequantizeFeatures, tileOrigin, type AtlasMeta } from '../site/src/lib/atlas-format';
 import { buildLayout, positionAt, type GalaxyLayout } from '../site/src/verse/layout';
 import { lookAt, mulberry32, multiply, perspective, type Vec3 } from '../site/src/verse/math';
 
@@ -243,19 +243,7 @@ async function main(): Promise<void> {
 async function renderHeroSheet(atlas: AtlasMeta, sheets: { data: Buffer; width: number }[]): Promise<void> {
   const fpath = path.join(ATLAS_DIR, 'features.bin');
   const feats = dequantizeFeatures(new Uint8Array(fs.readFileSync(fpath)));
-  const scores = atlas.slugs.map((_, i) => {
-    let chroma = 0, mean = 0, sq = 0;
-    for (let b = 0; b < BINS; b++) {
-      const o = i * FEAT_DIM + b * 3;
-      const L = feats[o]!, A = feats[o + 1]!, B = feats[o + 2]!;
-      chroma += Math.hypot(A, B);
-      mean += L;
-      sq += L * L;
-    }
-    mean /= BINS;
-    const spread = Math.sqrt(Math.max(0, sq / BINS - mean * mean));
-    return { i, score: chroma / BINS + spread * 0.8 };
-  });
+  const scores = atlas.slugs.map((_, i) => ({ i, score: colorfulness(feats, i) }));
   const picked = scores.sort((a, b) => b.score - a.score).slice(0, HERO_COUNT).map((s) => s.i).sort((a, b) => a - b);
   const rows = Math.ceil(picked.length / HERO_COLS);
   const tiles = await Promise.all(picked.map(async (i, k) => {

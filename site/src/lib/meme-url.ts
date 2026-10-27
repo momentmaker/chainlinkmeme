@@ -71,6 +71,11 @@ export function fullUrl(filename: string, opts: { animated?: boolean } = {}): st
   return `https://wsrv.nl/?${params.toString()}`;
 }
 
+// Any internal path, under the deployed base (`pageUrl('/verse/')`).
+export function pageUrl(path: string): string {
+  return `${BASE}${path}`;
+}
+
 export function permalinkUrl(slug: string): string {
   return `${BASE}/m/${slug}/`;
 }

@@ -50,11 +50,12 @@ Drop in a photo (or take a selfie, or pick a meme, or the chainlink mark) and th
 - It all runs in the browser. **The photo never leaves the device.**
 
 ### Gallery
-- Responsive JS masonry (1/2/3 columns), append-only so scrolling back up never reshuffles memes
-- Tag search with synonym-aware autocomplete
+- Responsive JS masonry (2/3/4 columns), append-only so scrolling back up never reshuffles memes
+- Browse by vibe: a scrollable rail of the 24 biggest tags, each fronted by its most colourful meme as a hex (picked at build time from the memeverse atlas's colour features, `site/src/lib/tag-rail.ts`); one tap filters the wall
+- A command bar that sticks to the top while you scroll: tag search with synonym-aware autocomplete, fresh / shuffle order (shuffle is a seeded re-deal, so pagination stays stable), GIFs only, Favorites only, Random
+- Cards carry a caption and their first tags, a "new" badge for recent additions, and one-click **copy image** (a PNG straight to the clipboard, paste it into X or Telegram; GIFs fall back to copying the link)
 - Per-meme permalinks (`/m/<slug>`) with full OG + Twitter cards
-- Filter toggles: GIFs only, Favorites only
-- `r` for a random meme; `/` to focus search; `j/k` to navigate; `f` to favorite; `?` for the full keymap
+- `r` for a random meme; `/` to focus search; `j/k` to navigate; `f` to favorite; `i` to copy the image; `?` for the full keymap
 - View transitions between gallery and permalinks
 - Dark / light themes (respects `prefers-color-scheme`)
 - The stage: the meme of the day as a holographic collector card (foil and glare follow the cursor) over a living honeycomb of the archive's most colourful memes, which drifts, shimmers, lights up around the pointer and flips tiles over. The pick is re-made in the browser for today's UTC date, so it matches the daily X post between deploys, and it flips to the next one at midnight with a countdown. The honeycomb's sheet (`atlas/hero.webp`, ~145 KB) is rendered by `scripts/build-verse-og.ts`

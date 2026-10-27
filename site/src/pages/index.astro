@@ -4,6 +4,8 @@ import Gallery, { ThemeToggle, ProgressBar, HexScrollTop } from '../components/G
 import { memeOfDay } from '../lib/meme-of-day';
 import { fullUrl, memeUrl, permalinkUrl, thumbUrl } from '../lib/meme-url';
 import { cardNumber, dayLabel } from '../lib/stage';
+import { buildTagRail } from '../lib/tag-rail';
+import path from 'node:path';
 import '../styles/stage.css';
 import type { Manifest } from '../lib/manifest';
 import manifestJson from '../../public/manifest.json';
@@ -13,6 +15,12 @@ import manifestJson from '../../public/manifest.json';
 // so the full data doesn't get serialized into the hydration payload.
 const manifest = manifestJson as Manifest;
 const mod = memeOfDay(manifest.memes);
+// Read from the built atlas on disk (public/atlas, produced before astro
+// build); without it the rail still renders, just with plainer covers.
+const tagRail = buildTagRail(manifest.memes, path.resolve('public/atlas'));
+// "new" badges: anything added in the 45 days before this build. The legacy
+// import all shares 2020-02-11, so it never qualifies.
+const freshSince = new Date(Date.parse(manifest.generated_at ?? new Date().toISOString()) - 45 * 86400_000).toISOString().slice(0, 10);
 const modIndex = mod ? manifest.memes.indexOf(mod) : -1;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const manifestHref = `${base}/manifest.json`;
@@ -114,7 +122,7 @@ const homeOg = `${siteUrl}/og/_home.png?v=${encodeURIComponent(lastBuilt || 'ini
     </section>
   )}
 
-  <Gallery client:load manifestUrl={manifestHref} />
+  <Gallery client:load manifestUrl={manifestHref} tagRail={tagRail} freshSince={freshSince} />
 
   <HexScrollTop client:load />
 

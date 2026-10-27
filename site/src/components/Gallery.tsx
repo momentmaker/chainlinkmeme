@@ -1,11 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Manifest, MemeEntry } from '../lib/manifest';
-import { apiUrl, fullUrl, memeUrl, permalinkUrl, thumbUrl } from '../lib/meme-url';
+import { apiUrl, fullUrl, memeUrl, pageUrl, permalinkUrl, thumbUrl } from '../lib/meme-url';
 import { filterMemes } from '../lib/search';
+import type { TagCover } from '../lib/tag-rail';
+import { mulberry32 } from '../verse/math';
 
 interface Props {
   manifestUrl?: string;
   pageSize?: number;
+  // "Browse by vibe": the biggest tags with a cover meme each (built at
+  // render time, see lib/tag-rail.ts).
+  tagRail?: TagCover[];
+  // Memes added on or after this date (YYYY-MM-DD) wear a "new" badge.
+  freshSince?: string;
+}
+
+type Order = 'fresh' | 'shuffle';
+
+const HASH_RE = /^[0-9a-f]{10,}$/i;
+function displayTitle(m: MemeEntry): string {
+  if (m.title && !HASH_RE.test(m.title)) return m.title;
+  return m.tags[0] ? `#${m.tags[0]}` : m.slug;
+}
+
+// Seeded Fisher–Yates, so one shuffle stays put while you scroll it.
+function shuffled<T>(list: T[], seed: number): T[] {
+  const out = list.slice();
+  const rand = mulberry32(seed);
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
 }
 
 const FAVS_KEY = 'chainlinkmeme:favorites';
@@ -86,7 +112,7 @@ function saveFavorites(favs: Set<string>) {
   }
 }
 
-export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 }: Props) {
+export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 24, tagRail = [], freshSince }: Props) {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   // Start with an empty set on SSR and hydrate favorites from localStorage
   // after mount — matches ThemeToggle's pattern and avoids the hydration
@@ -96,6 +122,21 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   const [query, setQuery] = useState('');
   const [animatedOnly, setAnimatedOnly] = useState(false);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  // The command bar only puts on its glass once it's pinned to the top: a
+  // zero-height sentinel above it scrolls out of view at that moment.
+  const stickRef = useRef<HTMLDivElement | null>(null);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const el = stickRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setStuck(!!e && !e.isIntersecting && e.boundingClientRect.top < 0));
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  // "fresh" keeps the manifest's newest-first order; "shuffle" deals a new
+  // wall, re-dealt each time it's pressed.
+  const [order, setOrder] = useState<Order>('fresh');
+  const [seed, setSeed] = useState(1);
   const [page, setPage] = useState(1);
   // Infinite scroll cap — after MAX_AUTO_PAGES the sentinel stops firing and a
   // "show all" button unlocks the rest. Without this, users never see the
@@ -146,11 +187,15 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   // rest of the matches.
   const spotlightActive = queryActive && filtered.length <= spotlightCap;
   const paginated = !spotlightActive;
+  const ordered = useMemo(
+    () => (order === 'shuffle' ? shuffled(filtered, seed) : filtered),
+    [filtered, order, seed],
+  );
   const visible = useMemo(() => {
     if (!manifest) return [] as MemeEntry[];
     if (paginated) {
-      const take = showAll ? filtered.length : Math.min(page, MAX_AUTO_PAGES) * pageSize;
-      return filtered.slice(0, take);
+      const take = showAll ? ordered.length : Math.min(page, MAX_AUTO_PAGES) * pageSize;
+      return ordered.slice(0, take);
     }
     const matchSet = new Set(filtered.map((m) => m.slug));
     const nonMatches = manifest.memes.filter((m) => !matchSet.has(m.slug));
@@ -158,7 +203,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
       ...filtered.slice(0, spotlightCap),
       ...nonMatches.slice(0, Math.max(0, spotlightCap - filtered.length)),
     ];
-  }, [manifest, filtered, paginated, page, pageSize, spotlightCap, showAll]);
+  }, [manifest, filtered, ordered, paginated, page, pageSize, spotlightCap, showAll]);
   const matchLookup = useMemo(() => new Set(filtered.map((m) => m.slug)), [filtered]);
   // slug → position in `visible` — lets the JS-masonry column render figure
   // out which card should hold the keyboard focus without an O(N) indexOf.
@@ -172,7 +217,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     setPage(1);
     setFocused(-1);
     setShowAll(false);
-  }, [query, animatedOnly, favoritesOnly]);
+  }, [query, animatedOnly, favoritesOnly, order, seed]);
 
   // `reactionsOffline` flips true once we've seen the bulk GET fail AND a
   // subsequent increment also fail. Surfaces a small footer pill so users
@@ -186,12 +231,13 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
   }, []);
 
   // Responsive column count, tracked via matchMedia so the JS masonry can
-  // redistribute on resize. Matches the old CSS breakpoints exactly.
-  const [columnCount, setColumnCount] = useState(3);
+  // redistribute on resize: 4 across on desktop, 3 on small laptops and
+  // tablets, 2 on phones. Breakpoints match THUMB_SIZES below.
+  const [columnCount, setColumnCount] = useState(4);
   useEffect(() => {
-    const sm = window.matchMedia('(max-width: 640px)');
-    const md = window.matchMedia('(max-width: 1096px)');
-    const update = () => setColumnCount(sm.matches ? 1 : md.matches ? 2 : 3);
+    const sm = window.matchMedia('(max-width: 900px)');
+    const md = window.matchMedia('(max-width: 1180px)');
+    const update = () => setColumnCount(sm.matches ? 2 : md.matches ? 3 : 4);
     update();
     sm.addEventListener('change', update);
     md.addEventListener('change', update);
@@ -266,22 +312,6 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     track('search-suggestion', { tag });
   }, [query]);
 
-  // Top 8 most-reacted memes by total across all reactions. Hidden until
-  // the archive has real community votes.
-  const popular = useMemo(() => {
-    if (!manifest) return [] as MemeEntry[];
-    return manifest.memes
-      .map((m) => {
-        const rs = reactions[m.slug];
-        const c = rs ? rs.heart + rs.laugh + rs.bolt + rs.diamond : 0;
-        return { m, c };
-      })
-      .filter(({ c }) => c > 0)
-      .sort((a, b) => b.c - a.c)
-      .slice(0, 8)
-      .map(({ m }) => m);
-  }, [manifest, reactions]);
-
   useEffect(() => {
     if (toast) {
       const id = setTimeout(() => setToast(null), 1500);
@@ -349,13 +379,42 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
     );
   }, []);
 
-  // Carousel scope for modal arrow-key navigation. When a query is active the
-  // carousel only steps through matches; otherwise it walks the whole archive
-  // in manifest order.
+  // The meme itself onto the clipboard, ready to paste into an X reply or a
+  // Discord message. The clipboard only takes PNG, so whatever wsrv serves is
+  // re-encoded through a canvas; the ClipboardItem gets the promise straight
+  // away so Safari still counts it as part of the click. GIFs can't be put on
+  // the clipboard animated, so they get their link instead.
+  const copyImage = useCallback((m: MemeEntry) => {
+    const canWrite = typeof ClipboardItem !== 'undefined' && !!navigator.clipboard?.write;
+    if (m.animated || !canWrite) {
+      copyPermalink(m.slug);
+      if (m.animated) setTimeout(() => setToast("GIFs can't ride the clipboard — link copied"), 0);
+      return;
+    }
+    track('meme-copy-image', { slug: m.slug });
+    const png = (async () => {
+      const res = await fetch(thumbUrl(m.filename, Math.min(1080, m.width || 1080)), { mode: 'cors' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const bmp = await createImageBitmap(await res.blob());
+      const c = document.createElement('canvas');
+      c.width = bmp.width;
+      c.height = bmp.height;
+      c.getContext('2d')!.drawImage(bmp, 0, 0);
+      bmp.close?.();
+      return new Promise<Blob>((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob'))), 'image/png'));
+    })();
+    navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]).then(
+      () => setToast('image copied — paste it anywhere'),
+      () => setToast('copy failed — try the link instead'),
+    );
+  }, [copyPermalink]);
+
+  // Carousel scope for modal arrow-key navigation: the wall as it's laid out
+  // (matches only while a query is active), in its current order.
   const carouselList = useMemo(() => {
     if (!manifest) return [] as MemeEntry[];
-    return queryActive ? filtered : manifest.memes;
-  }, [manifest, filtered, queryActive]);
+    return queryActive && spotlightActive ? filtered : ordered;
+  }, [manifest, filtered, ordered, queryActive, spotlightActive]);
 
   const modalMeme = useMemo(
     () => (modalSlug && manifest ? manifest.memes.find((m) => m.slug === modalSlug) ?? null : null),
@@ -414,6 +473,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
         if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'j') { stepModal(1); return; }
         if (e.key === 'ArrowLeft' || e.key === 'h' || e.key === 'k') { stepModal(-1); return; }
         if (e.key === 'c' && modalMeme) { copyPermalink(modalMeme.slug); return; }
+        if (e.key === 'i' && modalMeme) { copyImage(modalMeme); return; }
         if (e.key === 'f' && modalMeme) {
           toggleFavorite(modalMeme.slug);
           if (!favorites.has(modalMeme.slug)) incrementReaction(modalMeme.slug, 'heart');
@@ -448,12 +508,13 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
       if (!current) return;
       if (e.key === 'f') { toggleFavorite(current.slug); incrementReaction(current.slug, 'heart'); return; }
       if (e.key === 'c') { copyPermalink(current.slug); return; }
+      if (e.key === 'i') { copyImage(current); return; }
       if (e.key === 'Enter') { setModalSlug(current.slug); return; }
     },
     [
       modalSlug, modalMeme, showHelp, manifest, filtered, queryActive,
       visible, focused, favorites, stepModal,
-      toggleFavorite, copyPermalink, incrementReaction,
+      toggleFavorite, copyPermalink, copyImage, incrementReaction,
     ],
   );
 
@@ -496,33 +557,21 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
 
   return (
     <>
-      {popular.length > 0 && !queryActive && (
-        <section className="popular-strip" aria-label="Most-liked memes">
-          <h2 className="popular-heading">⬢ most liked</h2>
-          <div className="popular-scroll">
-            {popular.map((m) => (
-              <button
-                key={m.slug}
-                type="button"
-                className="popular-item"
-                onClick={() => setModalSlug(m.slug)}
-                aria-label={`Open ${m.title || m.slug}`}
-              >
-                <img
-                  src={thumbUrl(m.filename, 240, { animated: m.animated })}
-                  alt={m.title || m.slug}
-                  loading="lazy"
-                  onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = memeUrl(m.filename); }}
-                />
-                <span className="popular-badge">
-                  ⬢ {reactions[m.slug] ? fmtCount(reactions[m.slug].heart + reactions[m.slug].laugh + reactions[m.slug].bolt + reactions[m.slug].diamond) : 0}
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
+      {tagRail.length > 0 && (
+        <TagRail
+          items={tagRail}
+          total={manifest?.memes.length ?? 0}
+          active={query.trim().toLowerCase().replace(/^#/, '')}
+          onPick={(tag) => {
+            track('vibe-pick', { tag: tag ?? 'everything' });
+            setQuery(tag ?? '');
+            setShowSuggestions(false);
+          }}
+        />
       )}
 
+      <div ref={stickRef} className="toolbar-sentinel" aria-hidden="true" />
+      <div className={`toolbar ${stuck ? 'is-stuck' : ''}`}>
       <div className="search" role="search">
         <div className="search-wrap">
           <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -570,6 +619,31 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
             </ul>
           )}
         </div>
+        <div className="order-seg" role="radiogroup" aria-label="Order">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={order === 'fresh'}
+            className={order === 'fresh' ? 'on' : ''}
+            onClick={() => { track('order', { order: 'fresh' }); setOrder('fresh'); }}
+          >
+            fresh
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={order === 'shuffle'}
+            className={order === 'shuffle' ? 'on' : ''}
+            onClick={() => {
+              track('order', { order: 'shuffle' });
+              setOrder('shuffle');
+              setSeed(Math.floor(Math.random() * 2 ** 31));
+            }}
+            title="deal a new wall"
+          >
+            shuffle <span aria-hidden="true">⟳</span>
+          </button>
+        </div>
         <button
           type="button"
           className={`filter-pill ${animatedOnly ? 'active' : ''}`}
@@ -608,12 +682,21 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
           <span className="hex-btn-label">?</span>
         </button>
       </div>
+      </div>
 
-      {queryActive && manifest && (
+      {manifest && (
         <div className="match-count">
-          <strong>{filtered.length}</strong> match{filtered.length === 1 ? '' : 'es'}
-          {spotlightActive && filtered.length < manifest.memes.length && (
-            <> · non-matches dimmed for context</>
+          {queryActive ? (
+            <>
+              <strong>{filtered.length}</strong> match{filtered.length === 1 ? '' : 'es'}
+              {spotlightActive && filtered.length < manifest.memes.length && (
+                <> · non-matches dimmed for context</>
+              )}
+            </>
+          ) : (
+            <>
+              <strong>{filtered.length.toLocaleString()}</strong> memes · {order === 'fresh' ? 'newest first' : 'shuffled'}
+            </>
           )}
         </div>
       )}
@@ -638,6 +721,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
                     dim={spotlightActive && !matchLookup.has(m.slug)}
                     liked={favorites.has(m.slug)}
                     reactionCounts={reactions[m.slug] ?? EMPTY_REACTIONS}
+                    fresh={!!freshSince && m.date_added >= freshSince}
                     innerRef={i === focused ? focusedCardRef : null}
                     onOpenModal={() => setModalSlug(m.slug)}
                     onToggleFavorite={() => {
@@ -646,6 +730,7 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
                     }}
                     onReact={(rx) => incrementReaction(m.slug, rx)}
                     onCopyLink={() => copyPermalink(m.slug)}
+                    onCopyImage={() => copyImage(m)}
                   />
                 );
               })}
@@ -770,6 +855,15 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
                 <button
                   type="button"
                   className="card-link"
+                  onClick={(e) => { e.stopPropagation(); copyImage(modalMeme); }}
+                  aria-label={modalMeme.animated ? 'Copy link (GIFs cannot be copied as images)' : 'Copy image'}
+                  title={modalMeme.animated ? 'copy link' : 'copy image (i)'}
+                >
+                  <CopyImageIcon />
+                </button>
+                <button
+                  type="button"
+                  className="card-link"
                   onClick={(e) => { e.stopPropagation(); copyPermalink(modalMeme.slug); }}
                   aria-label="Copy permalink"
                   title="Copy permalink"
@@ -848,12 +942,11 @@ export default function Gallery({ manifestUrl = '/manifest.json', pageSize = 21 
 // the full-res original so a card never renders blank.
 //
 // THUMB_SIZES caps each tier at the real card width — the .page container maxes
-// at 1280px so a 3-col card never exceeds ~403px; an unclamped 33vw would make
-// wide non-retina viewports over-fetch the 1080w tier. Its 640/1096 breakpoints
-// MUST stay in sync with the matchMedia thresholds in the columnCount effect
-// and the @media rules in base.css.
+// at 1280px so a 4-col card never exceeds ~300px; an unclamped 25vw would make
+// wide non-retina viewports over-fetch. Its 900/1180 breakpoints MUST stay in
+// sync with the matchMedia thresholds in the columnCount effect.
 const THUMB_WIDTHS = [360, 540, 720, 1080] as const;
-const THUMB_SIZES = '(max-width: 640px) 100vw, (max-width: 1096px) min(50vw, 600px), min(33vw, 420px)';
+const THUMB_SIZES = '(max-width: 900px) 50vw, (max-width: 1180px) 33vw, 310px';
 
 function Thumb({ meme }: { meme: MemeEntry }) {
   const [failed, setFailed] = useState(false);
@@ -884,14 +977,26 @@ interface CardProps {
   dim: boolean;
   liked: boolean;
   reactionCounts: ReactionCounts;
+  fresh: boolean;
   innerRef: React.Ref<HTMLDivElement> | null;
   onOpenModal: () => void;
   onToggleFavorite: () => void;
   onReact: (reaction: Reaction) => void;
   onCopyLink: () => void;
+  onCopyImage: () => void;
 }
 
-function Card({ meme, index, focused, lit, dim, liked, reactionCounts, innerRef, onOpenModal, onToggleFavorite, onReact, onCopyLink }: CardProps) {
+function CopyImageIcon() {
+  return (
+    <svg className="card-link-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="8" y="8" width="13" height="13" rx="2" />
+      <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+      <path d="m10.5 18 3-3.5 2.5 2.5 1.5-1.5 2 2" />
+    </svg>
+  );
+}
+
+function Card({ meme, index, focused, lit, dim, liked, reactionCounts, fresh, innerRef, onOpenModal, onToggleFavorite, onReact, onCopyLink, onCopyImage }: CardProps) {
   const totalReactions = reactionCounts.heart + reactionCounts.laugh + reactionCounts.bolt + reactionCounts.diamond;
   return (
     <div
@@ -906,16 +1011,33 @@ function Card({ meme, index, focused, lit, dim, liked, reactionCounts, innerRef,
       <a href={permalinkUrl(meme.slug)} onClick={(e) => { e.preventDefault(); onOpenModal(); }}>
         <Thumb meme={meme} />
       </a>
-      <button
-        type="button"
-        className="card-link"
-        onClick={(e) => { e.stopPropagation(); onCopyLink(); }}
-        aria-label="Copy permalink"
-        title="Copy permalink"
-      >
-        <span className="card-link-icon" aria-hidden="true">🔗</span>
-      </button>
+      {fresh && <span className="card-new">new</span>}
+      <div className="card-actions">
+        <button
+          type="button"
+          className="card-link"
+          onClick={(e) => { e.stopPropagation(); onCopyImage(); }}
+          aria-label={meme.animated ? 'Copy link (GIFs cannot be copied as images)' : 'Copy image'}
+          title={meme.animated ? 'copy link' : 'copy image'}
+        >
+          <CopyImageIcon />
+        </button>
+        <button
+          type="button"
+          className="card-link"
+          onClick={(e) => { e.stopPropagation(); onCopyLink(); }}
+          aria-label="Copy permalink"
+          title="Copy permalink"
+        >
+          <span className="card-link-icon" aria-hidden="true">🔗</span>
+        </button>
+      </div>
       <div className="card-overlay">
+        <div className="card-caption">
+          <span className="card-title">{displayTitle(meme)}</span>
+          <span className="card-tags">{meme.tags.slice(0, 3).map((t) => `#${t}`).join(' ')}</span>
+        </div>
+        <div className="card-overlay-row">
         <div className="reaction-row" role="group" aria-label="Reactions">
           {REACTIONS.map((rx) => (
             <button
@@ -937,8 +1059,81 @@ function Card({ meme, index, focused, lit, dim, liked, reactionCounts, innerRef,
           ))}
         </div>
         {totalReactions > 0 && <span className="reaction-total" aria-hidden="true" title={`${totalReactions} total reactions`}>⬢ {fmtCount(totalReactions)}</span>}
+        </div>
       </div>
     </div>
+  );
+}
+
+// "Browse by vibe": the biggest tags as hex covers on a horizontal rail.
+// Picking one filters the wall below; "everything" clears it.
+function TagRail({ items, total, active, onPick }: {
+  items: TagCover[];
+  total: number;
+  active: string;
+  onPick: (tag: string | null) => void;
+}) {
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const [edge, setEdge] = useState({ start: true, end: false });
+  const measure = useCallback(() => {
+    const el = scroller.current;
+    if (!el) return;
+    setEdge({ start: el.scrollLeft < 8, end: el.scrollLeft + el.clientWidth > el.scrollWidth - 8 });
+  }, []);
+  useEffect(() => {
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [measure]);
+  const nudge = (dir: 1 | -1) => {
+    const el = scroller.current;
+    if (el) el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: 'smooth' });
+  };
+  return (
+    <section className="vibes" aria-label="Browse by vibe">
+      <div className="vibes-head">
+        <h2 className="vibes-title"><span aria-hidden="true">⬢</span> browse by vibe</h2>
+        <a className="vibes-verse" href={pageUrl('/verse/')}>see every tag as a star system <span aria-hidden="true">→</span></a>
+      </div>
+      <div className={`vibes-rail ${edge.start ? 'at-start' : ''} ${edge.end ? 'at-end' : ''}`}>
+        <button type="button" className="vibes-arrow prev" onClick={() => nudge(-1)} aria-label="Scroll vibes left" tabIndex={-1}>‹</button>
+        <div className="vibes-scroll" ref={scroller} onScroll={measure}>
+          <button type="button" className={`vibe ${active === '' ? 'on' : ''}`} onClick={() => onPick(null)} aria-pressed={active === ''}>
+            <span className="vibe-hex vibe-all" aria-hidden="true">
+              <svg viewBox="0 0 64 64">
+                <g fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinejoin="round">
+                  <polygon points="25.07,12 32,16 32,24 25.07,28 18.14,24 18.14,16" />
+                  <polygon points="38.93,12 45.86,16 45.86,24 38.93,28 32,24 32,16" />
+                  <polygon points="18.14,24 25.07,28 25.07,36 18.14,40 11.21,36 11.21,28" />
+                  <polygon points="45.86,24 52.79,28 52.79,36 45.86,40 38.93,36 38.93,28" />
+                  <polygon points="25.07,36 32,40 32,48 25.07,52 18.14,48 18.14,40" />
+                  <polygon points="38.93,36 45.86,40 45.86,48 38.93,52 32,48 32,40" />
+                </g>
+                <polygon fill="currentColor" points="32,24 38.93,28 38.93,36 32,40 25.07,36 25.07,28" />
+              </svg>
+            </span>
+            <span className="vibe-tag">everything</span>
+            <span className="vibe-n">{total ? total.toLocaleString() : ''}</span>
+          </button>
+          {items.map((it) => (
+            <button
+              key={it.tag}
+              type="button"
+              className={`vibe ${active === it.tag ? 'on' : ''}`}
+              onClick={() => onPick(active === it.tag ? null : it.tag)}
+              aria-pressed={active === it.tag}
+            >
+              <span className="vibe-hex" aria-hidden="true">
+                <img src={thumbUrl(it.filename, 180)} alt="" loading="lazy" decoding="async" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = memeUrl(it.filename); }} />
+              </span>
+              <span className="vibe-tag">#{it.tag}</span>
+              <span className="vibe-n">{it.count.toLocaleString()}</span>
+            </button>
+          ))}
+        </div>
+        <button type="button" className="vibes-arrow next" onClick={() => nudge(1)} aria-label="Scroll vibes right" tabIndex={-1}>›</button>
+      </div>
+    </section>
   );
 }
 
@@ -953,6 +1148,7 @@ function KeyboardHelp({ onClose }: { onClose: () => void }) {
           <dt>Enter</dt><dd>open focused meme</dd>
           <dt>f</dt><dd>favorite focused</dd>
           <dt>c</dt><dd>copy permalink</dd>
+          <dt>i</dt><dd>copy image</dd>
           <dt>r</dt><dd>random meme</dd>
           <dt>s</dt><dd>shuffle mode (fullscreen)</dd>
           <dt>← / →</dt><dd>step through in modal</dd>
