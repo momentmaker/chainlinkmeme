@@ -107,7 +107,7 @@ html:has(body.bare) {
   font-size: 15px;
   white-space: nowrap;
 }
-.verse-brand-mark { color: var(--v-sky); letter-spacing: 0.05em; }
+.verse-brand-mark { width: 30px; height: 30px; color: var(--v-sky); filter: drop-shadow(0 0 8px rgba(74, 142, 255, 0.5)); }
 
 .verse-title {
   display: flex;

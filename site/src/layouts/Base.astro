@@ -110,10 +110,29 @@ const ogAlt = ogImageAlt ?? description;
         <slot name="progress" />
         <main class="page">
           <header class="header">
-            <div class="brand-stack">
-              <a class="brand" href={`${base}/`}>⬡⏣⬢ chainlink meme ⬢⏣⬡</a>
-              <span class="tagline">cosmic memes by linkmarines, for chainlink</span>
-            </div>
+            <a class="brand" href={`${base}/`} aria-label="chainlink meme, home">
+              <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+                <defs>
+                  <linearGradient id="brand-grad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#4a8eff" />
+                    <stop offset="1" stop-color="#2f62df" />
+                  </linearGradient>
+                </defs>
+                <g class="brand-ring" fill="none" stroke="url(#brand-grad)" stroke-width="2.8" stroke-linejoin="round">
+                  <polygon points="25.07,12 32,16 32,24 25.07,28 18.14,24 18.14,16" />
+                  <polygon points="38.93,12 45.86,16 45.86,24 38.93,28 32,24 32,16" />
+                  <polygon points="18.14,24 25.07,28 25.07,36 18.14,40 11.21,36 11.21,28" />
+                  <polygon points="45.86,24 52.79,28 52.79,36 45.86,40 38.93,36 38.93,28" />
+                  <polygon points="25.07,36 32,40 32,48 25.07,52 18.14,48 18.14,40" />
+                  <polygon points="38.93,36 45.86,40 45.86,48 38.93,52 32,48 32,40" />
+                </g>
+                <polygon class="brand-core" fill="url(#brand-grad)" points="32,24 38.93,28 38.93,36 32,40 25.07,36 25.07,28" />
+              </svg>
+              <span class="brand-text">
+                <span class="brand-word">chainlink<span class="brand-meme">meme</span></span>
+                <span class="tagline">cosmic memes by linkmarines, for chainlink</span>
+              </span>
+            </a>
             <div class="right">
               <slot name="header-actions" />
               <a href={`${base}/verse/`} class="hex-btn verse-hex" aria-label="The memeverse" title="The memeverse — every meme as a star in one 3D galaxy">

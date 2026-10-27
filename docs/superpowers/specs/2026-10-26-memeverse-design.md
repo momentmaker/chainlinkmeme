@@ -30,7 +30,7 @@ memes/*  ─► build-manifest.ts ─► manifest.json
                  │           atlas/features.bin       4×4 Lab bins per tile (48 bytes)
                  │           atlas/atlas.json         slugs in tile order, mean colours
                  ▼
-         build-verse-og.ts ─► og/_verse.png, atlas/banner.webp
+         build-verse-og.ts ─► og/_verse.png, atlas/hero.webp
                  │
                  ▼
       /verse/ (Astro page, React island, raw WebGL 2)
@@ -109,7 +109,7 @@ them. Focusing a meme writes `#m=` back so the URL is always shareable.
 
 ## Entry points
 
-Header hex button (every page), a portal banner under the meme of the day,
+Header hex button (every page), the strip along the foot of the home page's stage,
 the footer, a "find it in the memeverse" button on every permalink, the 404
 page, and ccip.dev's Marine pages ("Fly your tags in the Memeverse").
 
