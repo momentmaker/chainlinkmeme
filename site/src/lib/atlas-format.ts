@@ -23,6 +23,13 @@ export const FEAT_DIM = BINS * 3;
 
 export const SQRT3 = Math.sqrt(3);
 
+// The home page's living honeycomb draws from a smaller sheet of its own:
+// the HERO_COUNT most colourful memes, HERO_TILE px each, HERO_COLS across,
+// in atlas tile order (see build-verse-og.ts).
+export const HERO_TILE = 48;
+export const HERO_COLS = 16;
+export const HERO_COUNT = 224;
+
 // Fraction of the square tile the hex spans horizontally; the shader maps the
 // hex's bounding box to [HEX_U0, 1 - HEX_U0] × [0, 1] of the tile.
 export const HEX_U0 = (1 - SQRT3 / 2) / 2;

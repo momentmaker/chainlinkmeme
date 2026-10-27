@@ -61,23 +61,58 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
 }
 
-.brand-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
+/* The logo: the favicon's hex flower as an SVG mark beside the wordmark.
+   The whole lockup is the home link, so it never underlines; the ring turns
+   one notch and the core swells on hover. */
 .brand {
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--brand-blue);
-  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--fg);
+  text-decoration: none;
+}
+.brand:hover, .brand:focus-visible { text-decoration: none; }
+.brand-mark {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  overflow: visible;
+  filter: drop-shadow(0 3px 8px rgba(47, 98, 223, 0.28));
+}
+.brand-ring, .brand-core { transform-box: fill-box; transform-origin: center; }
+.brand-ring { transition: transform 0.7s cubic-bezier(.2, .8, .2, 1); }
+.brand-core { transition: transform 0.4s cubic-bezier(.2, .8, .2, 1); }
+.brand:hover .brand-ring, .brand:focus-visible .brand-ring { transform: rotate(60deg); }
+.brand:hover .brand-core, .brand:focus-visible .brand-core { transform: scale(1.22); }
+.brand-text { display: flex; flex-direction: column; gap: 5px; }
+.brand-word {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--fg);
+}
+.brand-meme {
+  margin-left: 0.24em;
+  background: linear-gradient(120deg, #2f62df 0%, #4a8eff 55%, #7b5cff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .tagline {
   color: var(--muted);
-  font-size: 13px;
+  font: 500 11px/1 Menlo, Monaco, monospace;
+  letter-spacing: 0.06em;
+}
+
+@media (max-width: 440px) {
+  .tagline { display: none; }
+  .brand-mark { width: 40px; height: 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-ring, .brand-core { transition: none; }
 }
 
 .header .right {
@@ -241,75 +276,6 @@ a:hover { text-decoration: underline; }
 }
 .load-more-count strong { color: var(--brand-blue); font-weight: 700; }
 
-/* Memeverse portal — a window onto /verse under the meme-of-the-day hero.
-   Dark in both themes on purpose: it's a view into space, not page chrome.
-   The whole card is the link (an absolutely-positioned anchor under the
-   copy); the two CTAs sit above it for their own destinations. */
-.verse-portal {
-  position: relative;
-  min-height: 210px;
-  margin-bottom: 24px;
-  border-radius: 12px;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  color: #fff;
-  background:
-    linear-gradient(90deg, rgba(3, 5, 12, 0.94) 0%, rgba(3, 5, 12, 0.72) 38%, rgba(3, 5, 12, 0) 70%),
-    var(--portal-bg, none) right center / cover no-repeat,
-    #050814;
-  box-shadow: 0 0 0 1px rgba(74, 142, 255, 0.25), 0 10px 30px rgba(5, 10, 30, 0.25);
-  transition: transform 0.25s cubic-bezier(.2,.8,.2,1), box-shadow 0.25s ease;
-}
-.verse-portal:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 0 0 1px rgba(120, 170, 255, 0.55), 0 18px 44px rgba(47, 98, 223, 0.35);
-}
-.verse-portal-link { position: absolute; inset: 0; z-index: 1; }
-.verse-portal-copy { position: relative; z-index: 2; padding: 26px 28px; max-width: 520px; pointer-events: none; }
-.verse-portal-eyebrow {
-  margin: 0 0 8px;
-  font: 600 11px Menlo, Monaco, monospace;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #6fa0ff;
-}
-.verse-portal-title {
-  margin: 0 0 8px;
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  text-shadow: 0 0 24px rgba(74, 142, 255, 0.55);
-}
-.verse-portal-sub { margin: 0 0 16px; color: #c3d0f5; font-size: 14px; line-height: 1.45; }
-.verse-portal-ctas { display: flex; flex-wrap: wrap; gap: 8px; pointer-events: auto; }
-.verse-portal-cta {
-  display: inline-flex;
-  align-items: center;
-  height: 34px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(120, 160, 255, 0.4);
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff !important;
-  font-weight: 700;
-  font-size: 13px;
-  text-decoration: none !important;
-}
-.verse-portal-cta:hover { background: rgba(47, 98, 223, 0.45); }
-.verse-portal-cta.primary { background: linear-gradient(135deg, #2f62df, #4a8eff); border-color: rgba(190, 215, 255, 0.6); box-shadow: 0 0 20px rgba(74, 142, 255, 0.45); }
-@media (max-width: 640px) {
-  .verse-portal { min-height: 260px; align-items: flex-end; }
-  .verse-portal {
-    background:
-      linear-gradient(0deg, rgba(3, 5, 12, 0.95) 0%, rgba(3, 5, 12, 0.6) 55%, rgba(3, 5, 12, 0.1) 100%),
-      var(--portal-bg, none) 70% center / cover no-repeat,
-      #050814;
-  }
-  .verse-portal-copy { padding: 20px; }
-  .verse-portal-title { font-size: 21px; }
-}
-
 /* Header shortcut into the memeverse: the one hex button with a pulse. */
 .hex-btn.verse-hex::before { background: linear-gradient(135deg, #2f62df, #8fb2ff); }
 .hex-btn.verse-hex::after { background: #0a1024; }
@@ -322,7 +288,6 @@ a:hover { text-decoration: underline; }
 }
 @media (prefers-reduced-motion: reduce) {
   .hex-btn.verse-hex .hex-btn-label { animation: none; }
-  .verse-portal, .verse-portal:hover { transform: none; }
 }
 
 /* Most-liked strip — shows up under the hero once the community has voted. */
@@ -550,66 +515,6 @@ a:hover { text-decoration: underline; }
   padding: 2px 8px;
   border-radius: 999px;
   font-weight: 700;
-}
-
-.hero {
-  position: relative;
-  background: linear-gradient(135deg, var(--brand-blue), #4a7ff0);
-  color: white;
-  padding: 20px 24px;
-  border-radius: 12px;
-  margin-bottom: 24px;
-  display: flex;
-  gap: 20px;
-  align-items: center;
-  overflow: hidden;
-  transform-style: preserve-3d;
-  transform: perspective(1200px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
-  transition: transform 0.25s cubic-bezier(.2,.8,.2,1), box-shadow 0.25s ease;
-  will-change: transform;
-}
-.hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at var(--shine-x, 50%) var(--shine-y, 50%), rgba(255,255,255,0.22), transparent 55%);
-  opacity: var(--shine-opacity, 0);
-  transition: opacity 0.25s ease;
-  pointer-events: none;
-  mix-blend-mode: screen;
-}
-.hero:hover { box-shadow: 0 18px 40px rgba(47,98,223,0.35); }
-.hero-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.8; transform: translateZ(20px); }
-.hero-title {
-  font-size: 22px;
-  font-weight: 800;
-  margin: 4px 0 8px;
-  letter-spacing: -0.01em;
-  transform: translateZ(30px);
-  animation: hero-breath 4.5s ease-in-out infinite;
-}
-@keyframes hero-breath {
-  0%, 100% { text-shadow: 0 0 0 rgba(255,255,255,0); }
-  50%      { text-shadow: 0 0 14px rgba(255,255,255,0.35); }
-}
-.hero-img {
-  width: 160px;
-  height: 160px;
-  object-fit: cover;
-  border-radius: 8px;
-  border: 2px solid white;
-  flex-shrink: 0;
-  transform: translateZ(40px);
-  box-shadow: 0 10px 22px rgba(0,0,0,0.25);
-}
-@media (max-width: 640px) {
-  .hero { flex-direction: column; align-items: stretch; }
-  .hero-img { width: 100%; height: 200px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .hero { transform: none; transition: none; }
-  .hero::before { display: none; }
-  .hero-title { animation: none; }
 }
 
 /* Search bar — bigger, deeper, with a hex-icon affordance on the left and

@@ -1,0 +1,365 @@
+/* The home page's stage: meme of the day as a holo card over a living
+   honeycomb of the archive (site/src/lib/stage.ts drives it). Dark in both
+   themes on purpose — it's a window into space, like the memeverse it
+   leads to. */
+
+.stage {
+  --stage-ink: #eef3ff;
+  --stage-dim: #9fb0dc;
+  --stage-blue: #2f62df;
+  --stage-sky: #4a8eff;
+  --stage-line: rgba(130, 165, 255, 0.22);
+  position: relative;
+  isolation: isolate;
+  margin: 0 0 28px;
+  border-radius: 22px;
+  overflow: hidden;
+  color: var(--stage-ink);
+  background:
+    radial-gradient(ellipse 60% 80% at 74% 42%, #16295c 0%, transparent 70%),
+    radial-gradient(ellipse 50% 60% at 10% 100%, rgba(85, 40, 150, 0.35) 0%, transparent 70%),
+    #050812;
+  box-shadow:
+    0 0 0 1px rgba(110, 150, 255, 0.22),
+    0 24px 60px -18px rgba(18, 40, 110, 0.55);
+}
+
+.stage a { text-decoration: none; }
+.stage a:hover { text-decoration: none; }
+
+.stage-mosaic {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+  z-index: -2;
+}
+.stage-live .stage-mosaic { opacity: 1; }
+
+/* Darken behind the copy and along the bottom bar so type always reads,
+   leave the honeycomb bright around the card. */
+.stage-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(4, 6, 14, 0.94) 0%, rgba(4, 6, 14, 0.8) 34%, rgba(4, 6, 14, 0.12) 60%, rgba(4, 6, 14, 0.3) 100%),
+    linear-gradient(0deg, rgba(4, 6, 14, 0.95) 0px, rgba(4, 6, 14, 0) 110px),
+    linear-gradient(180deg, rgba(4, 6, 14, 0.5) 0px, rgba(4, 6, 14, 0) 80px);
+}
+
+.stage-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 32px;
+  align-items: center;
+  padding: 46px 52px 30px;
+  min-height: 400px;
+}
+
+.stage-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  font: 600 12px/1.3 Menlo, Monaco, monospace;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #8fb2ff;
+}
+.stage-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--stage-sky);
+  box-shadow: 0 0 0 0 rgba(74, 142, 255, 0.7);
+  animation: stage-pulse 2.2s ease-out infinite;
+}
+@keyframes stage-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(74, 142, 255, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(74, 142, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(74, 142, 255, 0); }
+}
+
+.stage-title {
+  margin: 0 0 18px;
+  font-size: clamp(34px, 4.8vw, 64px);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding-bottom: 0.06em;
+  background: linear-gradient(100deg, #ffffff 0%, #ffffff 40%, #b9d0ff 48%, #ffffff 56%, #ffffff 100%);
+  background-size: 260% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 26px rgba(74, 142, 255, 0.45));
+  animation: stage-shine 7s ease-in-out infinite;
+}
+@keyframes stage-shine {
+  0%, 55% { background-position: 100% 0; }
+  85%, 100% { background-position: 0% 0; }
+}
+
+.stage-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 24px;
+  padding: 0;
+  list-style: none;
+}
+.stage-tags a {
+  display: inline-block;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--stage-line);
+  background: rgba(47, 98, 223, 0.16);
+  color: #d6e3ff;
+  font: 600 12.5px Menlo, Monaco, monospace;
+  transition: background 0.15s, border-color 0.15s;
+}
+.stage-tags a:hover { background: rgba(47, 98, 223, 0.5); border-color: rgba(160, 195, 255, 0.7); }
+
+.stage-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+
+.stage-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 17px;
+  border-radius: 999px;
+  border: 1px solid rgba(140, 175, 255, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff !important;
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.stage-btn:hover { transform: translateY(-1px); background: rgba(47, 98, 223, 0.4); border-color: rgba(170, 200, 255, 0.7); }
+.stage-btn.primary { background: #ffffff; color: #0a1436 !important; border-color: #ffffff; }
+.stage-btn.primary:hover { background: #e6eeff; box-shadow: 0 0 24px rgba(160, 195, 255, 0.55); }
+.stage-btn.glow {
+  background: linear-gradient(135deg, #2f62df, #4a8eff);
+  border-color: rgba(190, 215, 255, 0.6);
+  box-shadow: 0 0 22px rgba(74, 142, 255, 0.5);
+}
+.stage-btn.glow:hover { background: linear-gradient(135deg, #3a6ff0, #63a0ff); box-shadow: 0 0 34px rgba(74, 142, 255, 0.75); }
+
+.stage-next {
+  margin: 0;
+  font: 500 12px Menlo, Monaco, monospace;
+  letter-spacing: 0.04em;
+  color: var(--stage-dim);
+}
+.stage-next span { color: #fff; font-variant-numeric: tabular-nums; }
+
+/* ── the holo card ───────────────────────────────────────────────────── */
+
+.holo {
+  --rx: 0deg;
+  --ry: 0deg;
+  --mx: 50%;
+  --my: 50%;
+  position: relative;
+  justify-self: center;
+  display: block;
+  width: min(300px, 100%);
+  aspect-ratio: 5 / 7;
+  transform: perspective(1000px) rotateX(var(--rx)) rotateY(var(--ry));
+  transform-style: preserve-3d;
+  transition: transform 0.35s cubic-bezier(.2, .8, .2, 1);
+  animation: holo-float 6s ease-in-out infinite;
+  will-change: transform;
+}
+.holo::before {
+  content: "";
+  position: absolute;
+  inset: -18%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(74, 142, 255, 0.55), rgba(74, 142, 255, 0) 100%);
+  filter: blur(10px);
+  pointer-events: none;
+}
+.holo-active { animation: none; transition: transform 0.08s linear; }
+@keyframes holo-float {
+  0%, 100% { transform: perspective(1000px) translateY(0) rotateX(2deg) rotateY(-6deg); }
+  50% { transform: perspective(1000px) translateY(-8px) rotateX(-2deg) rotateY(6deg); }
+}
+
+.holo-inner {
+  position: relative;
+  display: block;
+  height: 100%;
+  padding: 9px;
+  border-radius: 18px;
+  /* A chrome-and-chainlink-blue frame. */
+  background:
+    linear-gradient(145deg, #dfe8ff 0%, #6f97ff 18%, #2f62df 36%, #b49bff 54%, #6fc8ff 72%, #e8efff 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.35) inset,
+    0 30px 60px -12px rgba(0, 0, 0, 0.7),
+    0 0 40px rgba(74, 142, 255, 0.35);
+  overflow: hidden;
+}
+
+.holo-art {
+  position: relative;
+  display: block;
+  height: calc(100% - 42px);
+  border-radius: 11px;
+  overflow: hidden;
+  background: #0a1024;
+}
+.holo-bg {
+  position: absolute;
+  inset: -12%;
+  width: 124%;
+  height: 124%;
+  object-fit: cover;
+  filter: blur(18px) brightness(0.55) saturate(1.4);
+}
+.holo-img {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.holo-foil,
+.holo-glare {
+  position: absolute;
+  inset: 9px;
+  border-radius: 11px;
+  pointer-events: none;
+}
+/* Rainbow foil, showing through a hex lattice, sliding with the pointer. */
+.holo-foil {
+  background: linear-gradient(115deg,
+    transparent 18%,
+    rgba(255, 60, 160, 0.75) 28%,
+    rgba(255, 220, 60, 0.75) 36%,
+    rgba(40, 255, 180, 0.75) 44%,
+    rgba(40, 180, 255, 0.75) 52%,
+    rgba(170, 90, 255, 0.75) 60%,
+    transparent 72%);
+  background-size: 260% 260%;
+  background-position: var(--mx) var(--my);
+  mix-blend-mode: color-dodge;
+  opacity: 0.12;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'><path fill='%23000' fill-rule='evenodd' d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'><path fill='%23000' fill-rule='evenodd' d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/></svg>");
+  -webkit-mask-size: 20px 35px;
+  mask-size: 20px 35px;
+  transition: opacity 0.3s ease;
+  animation: holo-sweep 8s ease-in-out infinite;
+}
+.holo-active .holo-foil { opacity: 0.26; animation: none; }
+@keyframes holo-sweep {
+  0%, 100% { background-position: 0% 30%; }
+  50% { background-position: 100% 70%; }
+}
+.holo-glare {
+  background: radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0) 45%);
+  mix-blend-mode: overlay;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.holo-active .holo-glare { opacity: 1; }
+
+.holo-plate {
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  bottom: 9px;
+  height: 33px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 11px;
+  border-radius: 9px;
+  background: linear-gradient(180deg, rgba(6, 10, 26, 0.88), rgba(10, 18, 44, 0.95));
+  font: 700 10.5px/1 Menlo, Monaco, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #dbe6ff;
+}
+.holo-mark { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.holo-mark svg { width: 11px; height: 11px; fill: var(--stage-sky); }
+.holo-no { color: #8fb2ff; letter-spacing: 0.06em; white-space: nowrap; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+
+/* The daily swap, and the swap when the client's pick differs from the build's. */
+.holo-flip .holo-inner { animation: holo-flip 0.7s ease-in-out; }
+@keyframes holo-flip {
+  0% { transform: rotateY(0); }
+  45%, 55% { transform: rotateY(90deg); }
+  100% { transform: rotateY(0); }
+}
+
+/* ── the memeverse strip ─────────────────────────────────────────────── */
+
+.stage-verse {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  padding: 16px 52px 22px;
+  border-top: 1px solid var(--stage-line);
+  background: linear-gradient(90deg, rgba(47, 98, 223, 0.2), rgba(47, 98, 223, 0) 75%);
+  font-size: 14px;
+  color: #c3d0f5;
+}
+.stage-verse strong { color: #fff; }
+.stage-verse-badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #2f62df, #8fb2ff);
+  color: #fff;
+  font: 800 10.5px Menlo, Monaco, monospace;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  box-shadow: 0 0 16px rgba(74, 142, 255, 0.6);
+}
+.stage-verse-copy { flex: 1 1 280px; min-width: 0; }
+.stage-verse-ctas { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* ── narrow screens ──────────────────────────────────────────────────── */
+
+@media (max-width: 820px) {
+  .stage-grid { grid-template-columns: 1fr; gap: 26px; padding: 30px 22px 22px; min-height: 0; }
+  .holo { order: -1; width: min(240px, 70vw); }
+  .holo-plate { font-size: 9.5px; letter-spacing: 0.08em; padding: 0 9px; }
+  .holo-of { display: none; }
+  .stage-copy { text-align: center; }
+  .stage-eyebrow, .stage-tags, .stage-actions { justify-content: center; }
+  .stage-title { font-size: clamp(30px, 8.5vw, 44px); }
+  .stage-shade {
+    background:
+      linear-gradient(180deg, rgba(4, 6, 14, 0.3) 0%, rgba(4, 6, 14, 0.55) 40%, rgba(4, 6, 14, 0.92) 62%, rgba(4, 6, 14, 0.95) 100%);
+  }
+  .stage-verse { padding: 16px 22px 20px; justify-content: center; text-align: center; }
+  .stage-verse-ctas { width: 100%; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .holo, .holo-foil, .stage-title, .stage-pulse { animation: none; }
+  .holo { transition: none; }
+}

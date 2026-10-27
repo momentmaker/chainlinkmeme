@@ -57,7 +57,7 @@ Drop in a photo (or take a selfie, or pick a meme, or the chainlink mark) and th
 - `r` for a random meme; `/` to focus search; `j/k` to navigate; `f` to favorite; `?` for the full keymap
 - View transitions between gallery and permalinks
 - Dark / light themes (respects `prefers-color-scheme`)
-- Meme-of-the-day hero with cursor-reactive tilt + shine
+- The stage: the meme of the day as a holographic collector card (foil and glare follow the cursor) over a living honeycomb of the archive's most colourful memes, which drifts, shimmers, lights up around the pointer and flips tiles over. The pick is re-made in the browser for today's UTC date, so it matches the daily X post between deploys, and it flips to the next one at midnight with a countdown. The honeycomb's sheet (`atlas/hero.webp`, ~145 KB) is rendered by `scripts/build-verse-og.ts`
 - Hex-shaped scroll-to-top widget
 
 ### Reactions
@@ -106,7 +106,7 @@ Secrets (`X_API_KEY` / `X_API_SECRET` / `X_ACCESS_TOKEN` / `X_ACCESS_SECRET`) li
 Each permalink has a **save as sticker** button that exports to Signal-spec 512×512 — WebP for static memes, APNG for animated (≤300 KB, ≤3s loop). The APNG branch runs UPNG quantization entirely in-browser, adaptively dropping the color palette until it fits the 300 KB budget; the whole encoder bundle is lazy-loaded (~95 KB) and only ships when someone actually clicks the button. Drop the output straight into Signal, Telegram, Discord, or Slack.
 
 ### OG images
-Every meme has a pre-rendered 1200×630 OG card (baked by `scripts/build-og-images.ts` with Satori + Resvg, CI-cached by content hash). The home page has a custom 77-meme honeycomb mosaic. The memeverse's card (`og/_verse.png`) and the home page's portal banner are the real galaxy layout, projected and composited by `scripts/build-verse-og.ts`.
+Every meme has a pre-rendered 1200×630 OG card (baked by `scripts/build-og-images.ts` with Satori + Resvg, CI-cached by content hash). The home page has a custom 77-meme honeycomb mosaic. The memeverse's card (`og/_verse.png`) is the real galaxy layout, projected and composited by `scripts/build-verse-og.ts`.
 
 ### Honeycomb grid (`/grid`)
 Every meme in the archive, at once, as a single hex tessellation. Wheel to zoom, drag to pan, click any tile to open. Zoomed out, tiles come from the memeverse's sprite sheets (two images for the whole archive); full images take over as you zoom in.

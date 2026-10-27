@@ -449,7 +449,17 @@ export default function Verse({ manifestUrl, atlasBase, base }: Props) {
 
       <header className="verse-top">
         <a className="verse-brand" href={`${base}/`} title="back to the gallery">
-          <span className="verse-brand-mark">⬡⏣⬢</span>
+          <svg className="verse-brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+            <g fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinejoin="round">
+              <polygon points="25.07,12 32,16 32,24 25.07,28 18.14,24 18.14,16" />
+              <polygon points="38.93,12 45.86,16 45.86,24 38.93,28 32,24 32,16" />
+              <polygon points="18.14,24 25.07,28 25.07,36 18.14,40 11.21,36 11.21,28" />
+              <polygon points="45.86,24 52.79,28 52.79,36 45.86,40 38.93,36 38.93,28" />
+              <polygon points="25.07,36 32,40 32,48 25.07,52 18.14,48 18.14,40" />
+              <polygon points="38.93,36 45.86,40 45.86,48 38.93,52 32,48 32,40" />
+            </g>
+            <polygon fill="currentColor" points="32,24 38.93,28 38.93,36 32,40 25.07,36 25.07,28" />
+          </svg>
           <span className="verse-brand-text">chainlink meme</span>
         </a>
         <div className="verse-title">

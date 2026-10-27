@@ -2,7 +2,9 @@
 import Base from '../layouts/Base.astro';
 import Gallery, { ThemeToggle, ProgressBar, HexScrollTop } from '../components/Gallery';
 import { memeOfDay } from '../lib/meme-of-day';
-import { fullUrl, memeUrl, permalinkUrl } from '../lib/meme-url';
+import { fullUrl, memeUrl, permalinkUrl, thumbUrl } from '../lib/meme-url';
+import { cardNumber, dayLabel } from '../lib/stage';
+import '../styles/stage.css';
 import type { Manifest } from '../lib/manifest';
 import manifestJson from '../../public/manifest.json';
 
@@ -11,6 +13,7 @@ import manifestJson from '../../public/manifest.json';
 // so the full data doesn't get serialized into the hydration payload.
 const manifest = manifestJson as Manifest;
 const mod = memeOfDay(manifest.memes);
+const modIndex = mod ? manifest.memes.indexOf(mod) : -1;
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const manifestHref = `${base}/manifest.json`;
 
@@ -50,39 +53,66 @@ const homeOg = `${siteUrl}/og/_home.png?v=${encodeURIComponent(lastBuilt || 'ini
   <ThemeToggle client:load slot="header-actions" />
 
   {mod && (
-    <a href={permalinkUrl(mod.slug)} class="hero" style="text-decoration: none; color: white;">
-      <img
-        class="hero-img"
-        src={fullUrl(mod.filename, { animated: mod.animated })}
-        alt={heroTitle}
-        width={mod.width || 160}
-        height={mod.height || 160}
-        loading="eager"
-        decoding="async"
-        onerror={`this.onerror=null;this.src='${memeUrl(mod.filename)}'`}
-      />
-      <div>
-        <div class="hero-label">⬢ meme of the day</div>
-        <div class="hero-title">{heroTitle}</div>
-        <div style="font-size: 12px; opacity: 0.8;">
-          {mod.tags.slice(0, 6).join(' · ')}
-        </div>
-      </div>
-    </a>
-  )}
+    <section
+      class="stage"
+      data-stage
+      data-base={base}
+      data-manifest={manifestHref}
+      data-mod-slug={mod.slug}
+      aria-label="Meme of the day"
+    >
+      <canvas class="stage-mosaic" data-stage-mosaic data-sheet={`${base}/atlas/hero.webp?v=${encodeURIComponent(lastBuilt || 'initial')}`} aria-hidden="true"></canvas>
+      <div class="stage-shade" aria-hidden="true"></div>
 
-  <div class="verse-portal" style={`--portal-bg: url(${base}/atlas/banner.webp?v=${encodeURIComponent(lastBuilt || 'initial')})`}>
-    <a class="verse-portal-link" href={`${base}/verse/`} aria-label="Enter the memeverse"></a>
-    <div class="verse-portal-copy">
-      <p class="verse-portal-eyebrow">⬢ new · the memeverse</p>
-      <h2 class="verse-portal-title">every chainlink meme, one galaxy</h2>
-      <p class="verse-portal-sub">Fly through all {stats.memes} memes in 3D — or assemble your own face out of them.</p>
-      <div class="verse-portal-ctas">
-        <a class="verse-portal-cta primary" href={`${base}/verse/`}>enter the memeverse →</a>
-        <a class="verse-portal-cta" href={`${base}/verse/#assemble`}>⬢ assemble yourself</a>
+      <div class="stage-grid">
+        <div class="stage-copy">
+          <p class="stage-eyebrow"><span class="stage-pulse" aria-hidden="true"></span>meme of the day · <time data-stage-date>{dayLabel(new Date())}</time></p>
+          <h2 class="stage-title" data-stage-title>{heroTitle}</h2>
+          <ul class="stage-tags" data-stage-tags>
+            {mod.tags.slice(0, 6).map((t) => <li><a href={`${base}/?q=${encodeURIComponent(t)}`}>#{t}</a></li>)}
+          </ul>
+          <div class="stage-actions">
+            <a class="stage-btn primary" data-stage-open href={permalinkUrl(mod.slug)}>open the meme <span aria-hidden="true">→</span></a>
+            <a class="stage-btn" data-stage-find href={`${base}/verse/#m=${encodeURIComponent(mod.slug)}`}>find it in the memeverse</a>
+          </div>
+          <p class="stage-next">next meme of the day in <span data-stage-countdown>··:··:··</span></p>
+        </div>
+
+        <a class="holo" data-stage-card data-stage-open href={permalinkUrl(mod.slug)} aria-label={`Open the meme of the day: ${heroTitle}`}>
+          <span class="holo-inner">
+            <span class="holo-art">
+              <img class="holo-bg" data-stage-bg src={thumbUrl(mod.filename, 240)} alt="" aria-hidden="true" loading="eager" decoding="async" />
+              <img
+                class="holo-img"
+                data-stage-img
+                src={fullUrl(mod.filename, { animated: mod.animated })}
+                alt={heroTitle}
+                loading="eager"
+                decoding="async"
+                fetchpriority="high"
+                onerror={`this.onerror=null;this.src='${memeUrl(mod.filename)}'`}
+              />
+            </span>
+            <span class="holo-foil" aria-hidden="true"></span>
+            <span class="holo-glare" aria-hidden="true"></span>
+            <span class="holo-plate">
+              <span class="holo-mark"><svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="32,6 54.5,19 54.5,45 32,58 9.5,45 9.5,19"/></svg>meme of the day</span>
+              <span class="holo-no"><span data-stage-no>{cardNumber(modIndex)}</span><span class="holo-of" data-stage-of> / {manifest.memes.length.toLocaleString('en-US')}</span></span>
+            </span>
+          </span>
+        </a>
       </div>
-    </div>
-  </div>
+
+      <div class="stage-verse">
+        <span class="stage-verse-badge">new</span>
+        <span class="stage-verse-copy"><strong>the memeverse</strong> — all {stats.memes} memes as one 3D galaxy you can fly through, or rebuild your face out of</span>
+        <span class="stage-verse-ctas">
+          <a class="stage-btn glow" href={`${base}/verse/`}>enter the memeverse <span aria-hidden="true">→</span></a>
+          <a class="stage-btn" href={`${base}/verse/#assemble`}>assemble yourself</a>
+        </span>
+      </div>
+    </section>
+  )}
 
   <Gallery client:load manifestUrl={manifestHref} />
 
@@ -98,33 +128,9 @@ const homeOg = `${siteUrl}/og/_home.png?v=${encodeURIComponent(lastBuilt || 'ini
 </Base>
 
 <script>
-  // Cursor-reactive tilt + shine for the meme-of-the-day hero.
-  // Vanilla JS keeps the payload tiny — no react island needed for this one.
-  // Rebinds on every astro:page-load so SPA navigation back to home doesn't
-  // leave a lifeless blue rectangle; dataset.bound prevents re-binding the
-  // same element twice if the router swaps body without replacing the hero.
-  function bindHero() {
-    const hero = document.querySelector<HTMLElement>('.hero');
-    if (!hero || hero.dataset.bound === '1') return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    hero.dataset.bound = '1';
-    const MAX_TILT = 5;
-    hero.addEventListener('mousemove', (e) => {
-      const r = hero.getBoundingClientRect();
-      const nx = (e.clientX - r.left) / r.width - 0.5;
-      const ny = (e.clientY - r.top) / r.height - 0.5;
-      hero.style.setProperty('--tilt-x', `${-ny * MAX_TILT}deg`);
-      hero.style.setProperty('--tilt-y', `${nx * MAX_TILT}deg`);
-      hero.style.setProperty('--shine-x', `${(nx + 0.5) * 100}%`);
-      hero.style.setProperty('--shine-y', `${(ny + 0.5) * 100}%`);
-      hero.style.setProperty('--shine-opacity', '1');
-    });
-    hero.addEventListener('mouseleave', () => {
-      hero.style.setProperty('--tilt-x', '0deg');
-      hero.style.setProperty('--tilt-y', '0deg');
-      hero.style.setProperty('--shine-opacity', '0');
-    });
-  }
-  bindHero();
-  document.addEventListener('astro:page-load', bindHero);
+  import { mountStage } from '../lib/stage';
+  // Rebinds on every astro:page-load so client-side navigation back home
+  // brings the stage back to life; mountStage ignores a stage it already runs.
+  mountStage();
+  document.addEventListener('astro:page-load', mountStage);
 </script>

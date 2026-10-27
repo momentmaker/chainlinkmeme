@@ -1,7 +1,8 @@
-// Renders the memeverse as still images for places WebGL can't go:
+// Renders still images from the atlas for places WebGL can't go:
 //
 //   site/public/og/_verse.png        1200×630 unfurl card for /verse
-//   site/public/atlas/banner.webp    the home page's portal into it
+//   site/public/atlas/hero.webp      the home page's living honeycomb: the
+//                                    most colourful memes, small, on one sheet
 //
 // Same layout, same tiles, same camera angle as the live page — projected
 // on the CPU and composited with sharp, with the type set by resvg in the
@@ -12,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
 import { Resvg } from '@resvg/resvg-js';
-import { HEX_U0, TILE, tileOrigin, type AtlasMeta } from '../site/src/lib/atlas-format';
+import { BINS, FEAT_DIM, HERO_COLS, HERO_COUNT, HERO_TILE, HEX_U0, TILE, dequantizeFeatures, tileOrigin, type AtlasMeta } from '../site/src/lib/atlas-format';
 import { buildLayout, positionAt, type GalaxyLayout } from '../site/src/verse/layout';
 import { lookAt, mulberry32, multiply, perspective, type Vec3 } from '../site/src/verse/math';
 
@@ -22,7 +23,7 @@ const ATLAS_DIR = path.join(ROOT, 'site', 'public', 'atlas');
 const OG_DIR = path.join(ROOT, 'site', 'public', 'og');
 const FONT_PATH = path.join(ROOT, 'scripts', 'assets', 'Inter-Bold.ttf');
 // Bump when the look of either image changes.
-const STAMP_VERSION = 1;
+const STAMP_VERSION = 2;
 const LAYOUT_SOURCES = ['site/src/verse/layout.ts', 'site/src/verse/math.ts'].map((f) => path.join(ROOT, f));
 
 interface Meme { slug: string; tags: string[] }
@@ -204,7 +205,7 @@ async function main(): Promise<void> {
   const want = `${STAMP_VERSION}:${atlas.signature}:${code.digest('hex')}`;
   if (
     fs.existsSync(stamp) && fs.readFileSync(stamp, 'utf8') === want
-    && fs.existsSync(path.join(OG_DIR, '_verse.png')) && fs.existsSync(path.join(ATLAS_DIR, 'banner.webp'))
+    && fs.existsSync(path.join(OG_DIR, '_verse.png')) && fs.existsSync(path.join(ATLAS_DIR, 'hero.webp'))
   ) {
     console.log('[verse-og] up to date — skipping');
     return;
@@ -231,11 +232,46 @@ async function main(): Promise<void> {
   </svg>`, 1200);
   await sharp(ogBase).composite([{ input: ogText }]).png({ compressionLevel: 9 }).toFile(path.join(OG_DIR, '_verse.png'));
 
-  // Home banner: wider, no type (the page sets it in HTML).
-  const banner = await render({ width: 1600, height: 520, yaw: 0.3, pitch: 0.5, dist: 0.9, shift: [0.68, 0.56] }, layout, atlas, sheets);
-  await banner.webp({ quality: 80 }).toFile(path.join(ATLAS_DIR, 'banner.webp'));
+  await renderHeroSheet(atlas, sheets);
   fs.writeFileSync(stamp, want);
-  console.log('[verse-og] wrote og/_verse.png and atlas/banner.webp');
+  console.log('[verse-og] wrote og/_verse.png and atlas/hero.webp');
+}
+
+// The home hero's honeycomb wants colour, not screenshots of text: score each
+// tile by its chroma and by how much its brightness varies across the 4×4
+// bins, keep the best HERO_COUNT, and lay them out in atlas order.
+async function renderHeroSheet(atlas: AtlasMeta, sheets: { data: Buffer; width: number }[]): Promise<void> {
+  const fpath = path.join(ATLAS_DIR, 'features.bin');
+  const feats = dequantizeFeatures(new Uint8Array(fs.readFileSync(fpath)));
+  const scores = atlas.slugs.map((_, i) => {
+    let chroma = 0, mean = 0, sq = 0;
+    for (let b = 0; b < BINS; b++) {
+      const o = i * FEAT_DIM + b * 3;
+      const L = feats[o]!, A = feats[o + 1]!, B = feats[o + 2]!;
+      chroma += Math.hypot(A, B);
+      mean += L;
+      sq += L * L;
+    }
+    mean /= BINS;
+    const spread = Math.sqrt(Math.max(0, sq / BINS - mean * mean));
+    return { i, score: chroma / BINS + spread * 0.8 };
+  });
+  const picked = scores.sort((a, b) => b.score - a.score).slice(0, HERO_COUNT).map((s) => s.i).sort((a, b) => a - b);
+  const rows = Math.ceil(picked.length / HERO_COLS);
+  const tiles = await Promise.all(picked.map(async (i, k) => {
+    const { page, x, y } = tileOrigin(i);
+    const sheet = sheets[page]!;
+    const raw = Buffer.alloc(TILE * TILE * 3);
+    for (let row = 0; row < TILE; row++) {
+      sheet.data.copy(raw, row * TILE * 3, ((y + row) * sheet.width + x) * 3, ((y + row) * sheet.width + x + TILE) * 3);
+    }
+    const input = await sharp(raw, { raw: { width: TILE, height: TILE, channels: 3 } }).resize(HERO_TILE, HERO_TILE).png().toBuffer();
+    return { input, left: (k % HERO_COLS) * HERO_TILE, top: Math.floor(k / HERO_COLS) * HERO_TILE };
+  }));
+  await sharp({ create: { width: HERO_COLS * HERO_TILE, height: rows * HERO_TILE, channels: 3, background: '#000' } })
+    .composite(tiles)
+    .webp({ quality: 72 })
+    .toFile(path.join(ATLAS_DIR, 'hero.webp'));
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });
