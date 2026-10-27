@@ -140,7 +140,9 @@ function mountMosaic(stage: HTMLElement, canvas: HTMLCanvasElement): () => void 
   function frame(now: number) {
     raf = 0;
     if (!running || !document.contains(canvas)) { stop(); return; }
-    if (!sprite || !visible || document.hidden) return;
+    // Off-screen: let the loop lapse; the IntersectionObserver restarts it.
+    // (A hidden tab needs nothing: the browser stops calling rAF itself.)
+    if (!sprite || !visible) return;
     const t = (now - t0) / 1000;
     draw(t, now);
     if (!still) kick();
@@ -300,6 +302,7 @@ function mountDaily(stage: HTMLElement, manifestUrl: string, base: string): () =
   let day = new Date().toISOString().slice(0, 10);
   const countdown = stage.querySelector<HTMLElement>('[data-stage-countdown]');
   const date = stage.querySelector<HTMLElement>('[data-stage-date]');
+  if (date) date.textContent = dayLabel(new Date());
 
   const pick = (animate: boolean) => {
     if (!manifest) return;
@@ -319,7 +322,11 @@ function mountDaily(stage: HTMLElement, manifestUrl: string, base: string): () =
     const ss = String(s % 60).padStart(2, '0');
     if (countdown) countdown.textContent = `${hh}:${mm}:${ss}`;
     const today = now.toISOString().slice(0, 10);
-    if (today !== day) { day = today; pick(true); }
+    if (today !== day) {
+      day = today;
+      if (date) date.textContent = dayLabel(now);
+      pick(true);
+    }
     if (!document.contains(stage)) { clearInterval(timer); return; }
   };
   tick();
