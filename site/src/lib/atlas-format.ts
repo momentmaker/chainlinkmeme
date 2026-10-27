@@ -182,6 +182,22 @@ export function dequantizeFeatures(q: Uint8Array): Float32Array {
   return f;
 }
 
+// How much a tile has going on: mean chroma across its bins plus the spread
+// of its brightness. High for colourful, contrasty memes; low for screenshots
+// of text. Picks the hero honeycomb's tiles and each tag's cover.
+export function colorfulness(features: Float32Array, i: number): number {
+  let chroma = 0, mean = 0, sq = 0;
+  for (let b = 0; b < BINS; b++) {
+    const o = i * FEAT_DIM + b * 3;
+    const L = features[o]!, A = features[o + 1]!, B = features[o + 2]!;
+    chroma += Math.hypot(A, B);
+    mean += L;
+    sq += L * L;
+  }
+  mean /= BINS;
+  return chroma / BINS + Math.sqrt(Math.max(0, sq / BINS - mean * mean)) * 0.8;
+}
+
 export function tileOrigin(index: number): { page: number; x: number; y: number } {
   const page = Math.floor(index / PER_PAGE);
   const cell = index % PER_PAGE;
